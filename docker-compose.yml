@@ -1,0 +1,36 @@
+# version: "3.8" // menghilangkan warning obsolete
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik_router
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - lostfound_net
+
+  backend:
+    build:
+      context: ./backend-api
+      dockerfile: Dockerfile
+    container_name: laravel_api
+    volumes:
+      - ./backend-api:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`api.lostfound.localhost`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    networks:
+      - lostfound_net
+
+networks:
+  lostfound_net:
+    driver: bridge

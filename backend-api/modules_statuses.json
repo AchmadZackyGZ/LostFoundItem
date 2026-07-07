@@ -1,0 +1,6 @@
+{
+    "Auth": true,
+    "Item": true,
+    "Chat": true,
+    "Notification": true
+}
