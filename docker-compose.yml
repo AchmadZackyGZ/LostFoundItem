@@ -8,7 +8,8 @@ services:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.web.address=:80"
+      - "--providers.docker.network=lostfound_net" # FIX 1: Beritahu Traefik nama jaringannya
+      - "--entrypoints.web.address=:80" # Pastikan huruf kecil semua
     ports:
       - "80:80"
       - "8080:8080"
@@ -27,6 +28,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.lostfound.localhost`)"
+      - "traefik.http.routers.backend.entrypoints=web" # FIX 2: Kunci ke pintu web (port 80)
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
     networks:
       - lostfound_net
@@ -34,3 +36,4 @@ services:
 networks:
   lostfound_net:
     driver: bridge
+    name: lostfound_net # FIX 3: Paksa Docker menggunakan nama murni tanpa embel-embel nama folder!
