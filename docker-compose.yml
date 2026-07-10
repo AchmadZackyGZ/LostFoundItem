@@ -5,15 +5,20 @@ services:
     image: traefik:v3.0
     container_name: traefik_router
     command:
+      - "--log.level=DEBUG" # TAMBAHKAN BARIS INI
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.web.address=:80"
+      - "--providers.docker.network=lostfound_net" # FIX 1: Beritahu Traefik nama jaringannya
+      - "--entrypoints.web.address=:80" # Pastikan huruf kecil semua
+      # TAMBAHKAN BARIS INI UNTUK WINDOWS:
+      - "--providers.docker.endpoint=tcp://host.docker.internal:2375"
     ports:
       - "80:80"
       - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # MATIKAN SEMENTARA VOLUMES SOCK INI:
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - lostfound_net
 
@@ -27,6 +32,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.lostfound.localhost`)"
+      - "traefik.http.routers.backend.entrypoints=web" # FIX 2: Kunci ke pintu web (port 80)
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
     networks:
       - lostfound_net
@@ -34,3 +40,4 @@ services:
 networks:
   lostfound_net:
     driver: bridge
+    name: lostfound_net # FIX 3: Paksa Docker menggunakan nama murni tanpa embel-embel nama folder!
