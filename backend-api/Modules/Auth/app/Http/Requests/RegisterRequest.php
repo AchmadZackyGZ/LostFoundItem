@@ -19,7 +19,7 @@ class RegisterRequest extends FormRequest
                 'email',
                 'max:255',
                 'unique:users.email',
-                'ends_with:@student.uisi.ac.id' //validasi email agar hanya email uisi saja yang bisa akses
+                'ends_with:@uisi.ac.id,@student.uisi.ac.id' //validasi email agar hanya email uisi saja yang bisa akses
             ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
