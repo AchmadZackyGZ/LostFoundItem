@@ -29,11 +29,8 @@ services:
     container_name: laravel_api
     volumes:
       - ./backend-api:/var/www/html
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`api.lostfound.localhost`)"
-      - "traefik.http.routers.backend.entrypoints=web" # FIX 2: Kunci ke pintu web (port 80)
-      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    ports:
+      - "8000:8000" # JALAN PINTAS EMAS: Buka pintu langsung ke Windows!
     networks:
       - lostfound_net
 
