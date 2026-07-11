@@ -12,8 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('discussions', function (Blueprint $table) {
-            $table->id();
-            
+            $table->uuid('id')->primary();
+
+            // Komentar ini ada di barang apa, dan ditulis oleh siapa
+            $table->foreignUuid('item_id')->constrained('items')->cascadeOnDelete();
+            $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
+
+            $table->text('message'); // Isi pesan/pertanyaan
+
             $table->timestamps();
         });
     }
