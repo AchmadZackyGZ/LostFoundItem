@@ -31,6 +31,7 @@ class AuthController extends Controller
     {
         $user = User::create([
             'name' => $request->name,
+            'nim' => $request->nim,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'mahasiswa', // Default role sesuai PRD
@@ -39,7 +40,7 @@ class AuthController extends Controller
         $this->sendOtpEmail($user->email);
 
         return response()->json([
-            'message' => 'Registrasi berhasil. Silakan cek email kampus Anda untuk memasukkan kode verifikasi 6 digit.',
+            'message' => 'Registrasi berhasil. Silakan cek email kampus Anda untuk memasukkan kode verifikasi 6 digit. Jangan lupa check di folder spam ya',
             'email' => $user->email // Kirim balik email agar frontend mudah lanjut ke halaman verifikasi
         ], 201);
     }
@@ -116,51 +117,52 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logout berhasil.']);
     }
 
+    // kode kode dibawah hasil generate dari php laravel nya jadi jika kita frontend nya menggunakan .blade maka 
+    // logic logic yang diatas itu diganti dibawah tapi kita menggunakan FE selain .blade jadi ini hanya deadcode saja 
+    // /**
+    //  * Display a listing of the resource.
+    //  */
+    // public function index()
+    // {
+    //     return view('auth::index');
+    // }
 
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        return view('auth::index');
-    }
+    // /**
+    //  * Show the form for creating a new resource.
+    //  */
+    // public function create()
+    // {
+    //     return view('auth::create');
+    // }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return view('auth::create');
-    }
+    // /**
+    //  * Store a newly created resource in storage.
+    //  */
+    // public function store(Request $request) {}
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
+    // /**
+    //  * Show the specified resource.
+    //  */
+    // public function show($id)
+    // {
+    //     return view('auth::show');
+    // }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('auth::show');
-    }
+    // /**
+    //  * Show the form for editing the specified resource.
+    //  */
+    // public function edit($id)
+    // {
+    //     return view('auth::edit');
+    // }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('auth::edit');
-    }
+    // /**
+    //  * Update the specified resource in storage.
+    //  */
+    // public function update(Request $request, $id) {}
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
+    // /**
+    //  * Remove the specified resource from storage.
+    //  */
+    // public function destroy($id) {}
 }
