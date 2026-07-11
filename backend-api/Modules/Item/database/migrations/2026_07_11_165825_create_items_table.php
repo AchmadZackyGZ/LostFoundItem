@@ -12,8 +12,24 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('items', function (Blueprint $table) {
-            $table->id();
-            
+            $table->uuid('id')->primary();
+
+            // Relasi ke pembuat post (mahasiswa) dan kategori
+            $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignUuid('category_id')->constrained('categories')->restrictOnDelete();
+
+            // Data Inti Barang
+            $table->enum('type', ['lost', 'found']);
+            $table->string('title');
+            $table->text('description');
+            $table->string('location');
+            $table->date('date');
+            $table->string('image_path')->nullable(); // Dari Cloudinary nanti
+
+            // Fitur PRD: Status & Tag Urgent
+            $table->enum('status', ['active', 'matching_process', 'resolved'])->default('active');
+            $table->boolean('is_urgent')->default(false); // Hanya Admin yang bisa ubah ini
+
             $table->timestamps();
         });
     }
