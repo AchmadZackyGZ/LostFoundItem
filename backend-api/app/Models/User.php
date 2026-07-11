@@ -2,22 +2,17 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Concerns\HasUuids; // Import trait HasUuids
-use Laravel\Sanctum\HasApiTokens; // Import trait Sanctum
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens, HasUuids; // Gunakan trait di sini
+    use HasFactory, Notifiable, HasApiTokens, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -26,9 +21,10 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'nim', // REVISI: Tambahkan nim ke fillable
         'email',
         'password',
-        'role', // Tambahkan role
+        'role',
     ];
 
     /**
