@@ -39,7 +39,7 @@ class AuthController extends Controller
         $this->sendOtpEmail($user->email);
 
         return response()->json([
-            'message' => 'Registrasi berhasil. Silakan cek email kampus Anda untuk memasukkan kode verifikasi 6 digit.',
+            'message' => 'Registrasi berhasil. Silakan cek email kampus Anda untuk memasukkan kode verifikasi 6 digit. Jangan lupa check di folder spam ya',
             'email' => $user->email // Kirim balik email agar frontend mudah lanjut ke halaman verifikasi
         ], 201);
     }
