@@ -24,7 +24,7 @@ class CategorySeeder extends Seeder
 
         foreach ($categories as $category) {
             Category::create([
-                'id' => Str::uuid(),
+                // 'id' => Str::uuid(), // karena di models category sudah menggunakan trait use HasUuids
                 'name' => $category,
                 'slug' => Str::slug($category)
             ]);
