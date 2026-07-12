@@ -11,7 +11,15 @@ class StoreItemRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'category_id' => ['required', 'uuid', 'exists:categories,id'],
+            'type' => ['required', 'in:lost,found'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string'],
+            'location' => ['required', 'string', 'max:255'],
+            'date' => ['required', 'date'],
+            'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'], // Max 5MB
+        ];
     }
 
     /**
@@ -19,6 +27,6 @@ class StoreItemRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return true; // Izinkan karena kita sudah pakai auth:sanctum di routes
     }
 }
