@@ -27,7 +27,7 @@ return new class extends Migration
             $table->string('image_path')->nullable(); // Dari Cloudinary nanti
 
             // Fitur PRD: Status & Tag Urgent
-            $table->enum('status', ['active', 'matching_process', 'resolved'])->default('active');
+            $table->enum('status', ['active', 'pending_claim', 'completed'])->default('active');
             $table->boolean('is_urgent')->default(false); // Hanya Admin yang bisa ubah ini
 
             $table->timestamps();
