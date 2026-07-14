@@ -11,7 +11,9 @@ class StoreDiscussionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'message' => ['required', 'string', 'max:500'],
+        ];
     }
 
     /**
