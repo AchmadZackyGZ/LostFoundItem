@@ -59,6 +59,58 @@ class ItemController extends Controller
     }
 
     /**
+     * Menampilkan detail 1 barang beserta diskusinya
+     */
+    public function show(string $id): JsonResponse
+    {
+        // Ambil barang beserta relasi kategori dan diskusi (diurutkan dari komentar terlama ke terbaru)
+        $item = Item::with(['category', 'discussions' => function ($query) {
+            $query->oldest();
+        }])->find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        // Panggil Modul Auth untuk data Pelapor
+        $reporter = $this->authClient->getUserById($item->user_id);
+
+        // Mapping data komentar untuk menyisipkan nama pembuat komentar
+        $discussions = $item->discussions->map(function ($discussion) {
+            $commenter = $this->authClient->getUserById($discussion->user_id);
+            return [
+                'id' => $discussion->id,
+                'message' => $discussion->message,
+                'created_at' => $discussion->created_at,
+                'user' => [
+                    'id' => $commenter['id'] ?? null,
+                    'name' => $commenter['name'] ?? 'Anonim',
+                ]
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil detail laporan',
+            'data' => [
+                'id' => $item->id,
+                'type' => $item->type,
+                'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
+                'description' => $item->description,
+                'location' => $item->location,
+                'date' => $item->date,
+                'image_path' => $item->image_path,
+                'status' => $item->status,
+                'reporter' => [
+                    'name' => $reporter['name'] ?? 'Anonim',
+                    'email' => $reporter['email'] ?? '-'
+                ],
+                'discussions' => $discussions // Masukkan array komentar yang sudah di-mapping
+            ]
+        ], 200);
+    }
+
+    /**
      * Show the form for creating a new resource.
      */
     public function create()
@@ -102,14 +154,6 @@ class ItemController extends Controller
             'message' => 'Laporan berhasil dibuat.',
             'data' => $item
         ], 201);
-    }
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('item::show');
     }
 
     /**
