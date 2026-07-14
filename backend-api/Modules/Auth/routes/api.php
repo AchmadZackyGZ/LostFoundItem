@@ -3,6 +3,21 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Auth\Http\Controllers\AuthController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('auths', AuthController::class)->names('auth');
+Route::prefix('auth')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+
+    // Route untuk verifikasi OTP
+    Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
+
+    // Route Resend Email dengan Throttle (1 = max hit, 1 = dalam hitungan 1 menit)
+    Route::post('/resend-verification', [AuthController::class, 'resendVerification'])
+        ->middleware('throttle:1,1');
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/me', function (\Illuminate\Http\Request $request) {
+            return response()->json($request->user());
+        });
+    });
 });

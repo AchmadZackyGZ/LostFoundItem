@@ -4,6 +4,8 @@ namespace Modules\Auth\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Auth\Contracts\AuthClientInterface;
+use Modules\Auth\Services\AuthClientService;
 
 class AuthServiceProvider extends ModuleServiceProvider
 {
@@ -16,6 +18,17 @@ class AuthServiceProvider extends ModuleServiceProvider
      * The lowercase version of the module name.
      */
     protected string $nameLower = 'auth';
+
+    /**
+     * Register the service provider.
+     */
+    public function register(): void
+    {
+        $this->app->register(RouteServiceProvider::class);
+
+        // Binding Contract ke Implementation
+        $this->app->bind(AuthClientInterface::class, AuthClientService::class);
+    }
 
     /**
      * Command classes to register.
