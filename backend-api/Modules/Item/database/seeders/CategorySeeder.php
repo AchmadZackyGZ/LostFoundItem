@@ -3,10 +3,10 @@
 namespace Modules\Item\Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Modules\Item\Models\Category; // Import model Category
-use Illuminate\Support\Str;       // Import Str untuk slug
+use Modules\Item\Models\Category;
+use Illuminate\Support\Str;
 
-class ItemDatabaseSeeder extends Seeder
+class CategorySeeder extends Seeder
 {
     /**
      * Run the database seeds.
@@ -22,9 +22,9 @@ class ItemDatabaseSeeder extends Seeder
             'Lainnya'
         ];
 
-        // Looping untuk insert langsung dari file Induk ini
         foreach ($categories as $category) {
             Category::create([
+                // 'id' => Str::uuid(), // karena di models category sudah menggunakan trait use HasUuids
                 'name' => $category,
                 'slug' => Str::slug($category)
             ]);
