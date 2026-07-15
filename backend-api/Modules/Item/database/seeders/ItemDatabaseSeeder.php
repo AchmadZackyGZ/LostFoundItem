@@ -13,8 +13,9 @@ class ItemDatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        echo "\n---> HALO BOSQUE, SEEDER KATEGORI JALAN NIH! <---\n"; // Tambahkan ini
         $categories = [
-            'Barang Elektronik',
+            // 'Barang Elektronik',
             'Dokumen & Surat',
             'Dompet & Uang',
             'Kunci',
