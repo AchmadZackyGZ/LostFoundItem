@@ -140,12 +140,36 @@ class ItemController extends Controller
         ], 200);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function update(Request $request, string $id): JsonResponse
     {
-        return view('item::create');
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        // 🚨 GEMBOK KEPEMILIKAN: Hanya pembuat postingan yang boleh edit
+        if ($item->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Ini bukan laporan barang Anda.'
+            ], 403);
+        }
+
+        // Validasi input (hanya memvalidasi data yang dikirim / sometimes)
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description' => 'sometimes|string',
+            'location' => 'sometimes|string',
+            'category_id' => 'sometimes|exists:categories,id'
+        ]);
+
+        // Eksekusi Update
+        $item->update($validated);
+
+        return response()->json([
+            'message' => 'Laporan barang berhasil diperbarui',
+            'data' => $item
+        ], 200);
     }
 
     /**
@@ -185,22 +209,4 @@ class ItemController extends Controller
             'data' => $item
         ], 201);
     }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('item::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }
