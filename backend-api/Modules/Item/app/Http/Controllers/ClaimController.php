@@ -40,6 +40,13 @@ class ClaimController extends Controller
             ], 404);
         }
 
+        // logc validasi klaim ke diri sendiri
+        if ($item->user_id === $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Anda tidak bisa mengajukan klaim untuk laporan barang Anda sendiri.'
+            ], 403); // Status 403 (Forbidden) sangat tepat untuk pelanggaran hak akses
+        }
+
         if ($item->status !== 'active') {
             return response()->json([
                 'message' => 'Barang ini sudah dalam proses klaim atau sudah dikembalikan.'
