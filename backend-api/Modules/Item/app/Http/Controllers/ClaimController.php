@@ -40,6 +40,13 @@ class ClaimController extends Controller
             ], 404);
         }
 
+        // logc validasi klaim ke diri sendiri
+        if ($item->user_id === $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Anda tidak bisa mengajukan klaim untuk laporan barang Anda sendiri.'
+            ], 403); // Status 403 (Forbidden) sangat tepat untuk pelanggaran hak akses
+        }
+
         if ($item->status !== 'active') {
             return response()->json([
                 'message' => 'Barang ini sudah dalam proses klaim atau sudah dikembalikan.'
@@ -74,6 +81,34 @@ class ClaimController extends Controller
             'message' => 'Klaim berhasil diajukan. Silakan tunggu verifikasi bukti kepemilikan oleh Admin',
             'data' => $claim
         ], 201);
+    }
+
+    public function myClaims(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        // Tarik data klaim beserta detail barang yang diklaim
+        $claims = Claim::where('user_id', $userId)
+            ->with('item')
+            ->latest()
+            ->get();
+
+        $mappedClaims = $claims->map(function ($claim) {
+            return [
+                'id' => $claim->id,
+                'item_id' => $claim->item_id,
+                'item_title' => $claim->item->title ?? 'Barang sudah dihapus',
+                'proof_description' => $claim->proof_description,
+                'proof_image_path' => $claim->proof_image_path,
+                'status' => $claim->status, // Akan berisi: pending, approved, atau rejected
+                'created_at' => $claim->created_at,
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil riwayat klaim Anda',
+            'data' => $mappedClaims
+        ], 200);
     }
 
     /**

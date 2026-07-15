@@ -110,12 +110,123 @@ class ItemController extends Controller
         ], 200);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function myItems(Request $request): JsonResponse
     {
-        return view('item::create');
+        // Ambil ID user yang sedang login dari token
+        $userId = $request->user()->id;
+
+        // Tarik data barang yang HANYA milik user ini
+        $items = Item::where('user_id', $userId)
+            ->with('category') // Eager load kategori agar tidak N+1 problem
+            ->latest()
+            ->get();
+
+        // Rapikan struktur JSON (Mapping)
+        $mappedItems = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'type' => $item->type,
+                'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
+                'status' => $item->status,
+                'date' => $item->date,
+                'created_at' => $item->created_at,
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil riwayat laporan barang Anda',
+            'data' => $mappedItems
+        ], 200);
+    }
+
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        // 🚨 GEMBOK KEPEMILIKAN
+        if ($item->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Ini bukan laporan barang Anda.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description' => 'sometimes|string',
+            'location' => 'sometimes|string',
+            'category_id' => 'sometimes|exists:categories,id',
+            'image' => 'sometimes|image|mimes:jpeg,png,jpg,webp|max:5120'
+        ]);
+
+        // ☁️ LOGIKA PENGGANTIAN GAMBAR CLOUDINARY
+        if ($request->hasFile('image')) {
+            // --- AWAL FITUR HAPUS GAMBAR LAMA ---
+            if ($item->image_path) {
+                // Ekstrak Public ID dari URL panjang menggunakan Regex
+                if (preg_match('/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/', $item->image_path, $matches)) {
+                    $publicId = $matches[1];
+                    cloudinary()->destroy($publicId); // Tembak API hapus ke Cloudinary
+                }
+            }
+            // --- AKHIR FITUR HAPUS GAMBAR LAMA ---
+
+            // Upload gambar baru
+            $uploadedFileUrl = cloudinary()->upload($request->file('image')->getRealPath(), [
+                'folder' => 'lost_found_uisi/items'
+            ])->getSecurePath();
+
+            $validated['image_path'] = $uploadedFileUrl;
+        }
+
+        $item->update($validated);
+
+        return response()->json([
+            'message' => 'Laporan barang berhasil diperbarui',
+            'data' => $item
+        ], 200);
+    }
+
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        // 🚨 GEMBOK KEPEMILIKAN
+        if ($item->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Anda tidak berhak menghapus laporan ini.'
+            ], 403);
+        }
+
+        // 🚨 CEGAH HAPUS SAAT PROSES KLAIM
+        if ($item->status !== 'active') {
+            return response()->json([
+                'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim oleh orang lain.'
+            ], 400);
+        }
+
+        // ☁️ HAPUS GAMBAR DARI CLOUDINARY SEBELUM DATA DIHAPUS
+        if ($item->image_path) {
+            if (preg_match('/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/', $item->image_path, $matches)) {
+                $publicId = $matches[1];
+                cloudinary()->destroy($publicId);
+            }
+        }
+
+        // Eksekusi Delete dari Database
+        $item->delete();
+
+        return response()->json([
+            'message' => 'Laporan barang dan gambar terkait berhasil dihapus dari sistem.'
+        ], 200);
     }
 
     /**
@@ -155,22 +266,4 @@ class ItemController extends Controller
             'data' => $item
         ], 201);
     }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('item::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }
