@@ -71,7 +71,7 @@ class ClaimController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Klaim berhasil diajukan. Menunggu konfirmasi pemilik postingan.',
+            'message' => 'Klaim berhasil diajukan. Silakan tunggu verifikasi bukti kepemilikan oleh Admin',
             'data' => $claim
         ], 201);
     }
