@@ -110,6 +110,36 @@ class ItemController extends Controller
         ], 200);
     }
 
+    public function myItems(Request $request): JsonResponse
+    {
+        // Ambil ID user yang sedang login dari token
+        $userId = $request->user()->id;
+
+        // Tarik data barang yang HANYA milik user ini
+        $items = Item::where('user_id', $userId)
+            ->with('category') // Eager load kategori agar tidak N+1 problem
+            ->latest()
+            ->get();
+
+        // Rapikan struktur JSON (Mapping)
+        $mappedItems = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'type' => $item->type,
+                'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
+                'status' => $item->status,
+                'date' => $item->date,
+                'created_at' => $item->created_at,
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil riwayat laporan barang Anda',
+            'data' => $mappedItems
+        ], 200);
+    }
+
     /**
      * Show the form for creating a new resource.
      */
