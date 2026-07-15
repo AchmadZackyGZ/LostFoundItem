@@ -172,6 +172,36 @@ class ItemController extends Controller
         ], 200);
     }
 
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        // 🚨 GEMBOK KEPEMILIKAN
+        if ($item->user_id !== $request->user()->id) {
+            return response()->json([
+                'message' => 'Akses ditolak: Anda tidak berhak menghapus laporan ini.'
+            ], 403);
+        }
+
+        // 🚨 CEGAH HAPUS SAAT PROSES KLAIM
+        if ($item->status !== 'active') {
+            return response()->json([
+                'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim oleh orang lain.'
+            ], 400);
+        }
+
+        // Eksekusi Delete
+        $item->delete();
+
+        return response()->json([
+            'message' => 'Laporan barang berhasil dihapus dari sistem.'
+        ], 200);
+    }
+
     /**
      * Store a newly created resource in storage.
      */
