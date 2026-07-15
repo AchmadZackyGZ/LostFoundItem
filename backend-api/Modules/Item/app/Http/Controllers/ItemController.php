@@ -148,22 +148,41 @@ class ItemController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
-        // 🚨 GEMBOK KEPEMILIKAN: Hanya pembuat postingan yang boleh edit
+        // 🚨 GEMBOK KEPEMILIKAN
         if ($item->user_id !== $request->user()->id) {
             return response()->json([
                 'message' => 'Akses ditolak: Ini bukan laporan barang Anda.'
             ], 403);
         }
 
-        // Validasi input (hanya memvalidasi data yang dikirim / sometimes)
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'description' => 'sometimes|string',
             'location' => 'sometimes|string',
-            'category_id' => 'sometimes|exists:categories,id'
+            'category_id' => 'sometimes|exists:categories,id',
+            'image' => 'sometimes|image|mimes:jpeg,png,jpg,webp|max:5120'
         ]);
 
-        // Eksekusi Update
+        // ☁️ LOGIKA PENGGANTIAN GAMBAR CLOUDINARY
+        if ($request->hasFile('image')) {
+            // --- AWAL FITUR HAPUS GAMBAR LAMA ---
+            if ($item->image_path) {
+                // Ekstrak Public ID dari URL panjang menggunakan Regex
+                if (preg_match('/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/', $item->image_path, $matches)) {
+                    $publicId = $matches[1];
+                    cloudinary()->destroy($publicId); // Tembak API hapus ke Cloudinary
+                }
+            }
+            // --- AKHIR FITUR HAPUS GAMBAR LAMA ---
+
+            // Upload gambar baru
+            $uploadedFileUrl = cloudinary()->upload($request->file('image')->getRealPath(), [
+                'folder' => 'lost_found_uisi/items'
+            ])->getSecurePath();
+
+            $validated['image_path'] = $uploadedFileUrl;
+        }
+
         $item->update($validated);
 
         return response()->json([
@@ -194,11 +213,19 @@ class ItemController extends Controller
             ], 400);
         }
 
-        // Eksekusi Delete
+        // ☁️ HAPUS GAMBAR DARI CLOUDINARY SEBELUM DATA DIHAPUS
+        if ($item->image_path) {
+            if (preg_match('/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/', $item->image_path, $matches)) {
+                $publicId = $matches[1];
+                cloudinary()->destroy($publicId);
+            }
+        }
+
+        // Eksekusi Delete dari Database
         $item->delete();
 
         return response()->json([
-            'message' => 'Laporan barang berhasil dihapus dari sistem.'
+            'message' => 'Laporan barang dan gambar terkait berhasil dihapus dari sistem.'
         ], 200);
     }
 
