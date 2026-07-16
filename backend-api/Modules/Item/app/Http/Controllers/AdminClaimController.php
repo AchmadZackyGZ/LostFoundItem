@@ -5,7 +5,6 @@ namespace Modules\Item\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Modules\Item\Models\Claim;
-use Modules\Item\Models\Item;
 
 class AdminClaimController extends Controller
 {
