@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Item\Http\Controllers\AdminClaimController;
 use Modules\Item\Http\Controllers\ItemController;
 use Modules\Item\Http\Controllers\DiscussionController;
 use Modules\Item\Http\Controllers\ClaimController;
@@ -20,4 +21,20 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
     // Route Klaim
     Route::post('/{id}/claims', [ClaimController::class, 'store']);
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| API ROLE ADMIN
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
+
+    // Lihat semua antrean klaim
+    Route::get('/claims', [AdminClaimController::class, 'index']);
+
+    // Tombol Setuju & Tolak Klaim
+    Route::put('/claims/{id}/approve', [AdminClaimController::class, 'approve']);
+    Route::put('/claims/{id}/reject', [AdminClaimController::class, 'reject']);
 });
