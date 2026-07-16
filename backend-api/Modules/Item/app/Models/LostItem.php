@@ -13,7 +13,16 @@ class LostItem extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
+    protected $fillable = [
+        'user_id',
+        'title',
+        'description',
+        'category',
+        'location_lost',
+        'incident_time',
+        'photo_url',
+        'status',
+    ];
 
     // protected static function newFactory(): LostItemFactory
     // {
