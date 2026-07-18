@@ -1,5 +1,6 @@
 import { Search, PlusCircle } from "lucide-react";
 import ItemCard from "@/components/ui/ItemCard";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -14,14 +15,20 @@ export default function Home() {
           barang hilang atau temuan Anda dengan cepat dan mudah.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <button className="bg-primary text-white px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-800 transition shadow-sm">
+          <Link
+            href="/report?tab=kehilangan"
+            className="bg-primary text-white px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-800 transition shadow-sm"
+          >
             <Search size={20} />
             Lapor Kehilangan
-          </button>
-          <button className="bg-surface dark:bg-surface-dark text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm">
+          </Link>
+          <Link
+            href="/report?tab=temuan"
+            className="bg-surface dark:bg-surface-dark text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition shadow-sm"
+          >
             <PlusCircle size={20} />
             Lapor Temuan
-          </button>
+          </Link>
         </div>
       </section>
 
