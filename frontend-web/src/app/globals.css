@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/* 🎨 Setup Tema Warna TraceBack untuk Tailwind v4 */
+@theme {
+  --color-primary: #1e3a8a;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f3f4f6;
+  --color-secondary-foreground: #1f2937;
+
+  --color-background: #f9fafb;
+  --color-background-dark: #0f172a;
+
+  --color-surface: #ffffff;
+  --color-surface-dark: #1e293b;
+
+  --color-danger: #dc2626;
+  --color-danger-foreground: #ffffff;
+
+  --color-success: #10b981;
+  --color-success-foreground: #ffffff;
+}
+
+@layer base {
+  /* Setup transisi warna agar saat ganti Light/Dark mode terlihat smooth */
+  body {
+    @apply bg-background text-gray-900 transition-colors duration-300 ease-in-out;
+  }
+
+  /* Class saat Dark Mode Aktif */
+  .dark body {
+    @apply bg-background-dark text-gray-100;
+  }
+}
+
+/* Menyembunyikan scrollbar tapi tetap bisa di-scroll (Elegan untuk Mobile) */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
