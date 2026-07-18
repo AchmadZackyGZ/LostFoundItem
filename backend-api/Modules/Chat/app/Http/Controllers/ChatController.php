@@ -7,14 +7,24 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Chat\Models\Conversation;
 use Modules\Chat\Models\Message;
-use Modules\Item\Models\Item;
+use Modules\Item\Contracts\ItemServiceInterface;
 
 class ChatController extends Controller
 {
+
+    protected ItemServiceInterface $itemService;
+
+    // 💉 DEPENDENCY INJECTION SANGAT ELEGAN
+    public function __construct(ItemServiceInterface $itemService)
+    {
+        $this->itemService = $itemService;
+    }
+
     // 1. MEMULAI ATAU MEMBUKA RUANG OBROLAN (Sihir Tokopedia)
     public function initiateConversation(Request $request, string $itemId): JsonResponse
     {
-        $item = Item::find($itemId);
+        // ✅ Panggil lewat Contract, bukan Model! (Loose Coupling)
+        $item = $this->itemService->findItemById($itemId);
 
         if (!$item) {
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
