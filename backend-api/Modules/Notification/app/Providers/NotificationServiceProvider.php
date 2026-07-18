@@ -17,6 +17,17 @@ class NotificationServiceProvider extends ModuleServiceProvider
      */
     protected string $nameLower = 'notification';
 
+    public function register(): void
+    {
+        $this->app->register(RouteServiceProvider::class);
+
+        // 🚨 Binding Interface ke Service
+        $this->app->bind(
+            \Modules\Notification\Contracts\NotificationServiceInterface::class,
+            \Modules\Notification\Services\NotificationService::class
+        );
+    }
+
     /**
      * Command classes to register.
      *

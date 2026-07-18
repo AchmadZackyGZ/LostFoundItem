@@ -3,54 +3,41 @@
 namespace Modules\Notification\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Notification\Models\AppNotification;
 
 class NotificationController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    // 1. AMBIL SEMUA NOTIFIKASI USER
+    public function index(Request $request): JsonResponse
     {
-        return view('notification::index');
+        $notifications = AppNotification::where('user_id', $request->user()->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'message' => 'Berhasil mengambil notifikasi.',
+            'data' => $notifications
+        ], 200);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    // 2. TANDAI NOTIFIKASI SUDAH DIBACA
+    public function markAsRead(Request $request, string $id): JsonResponse
     {
-        return view('notification::create');
+        $notification = AppNotification::where('id', $id)
+            ->where('user_id', $request->user()->id)
+            ->first();
+
+        if (!$notification) {
+            return response()->json(['message' => 'Notifikasi tidak ditemukan'], 404);
+        }
+
+        $notification->update(['is_read' => true]);
+
+        return response()->json([
+            'message' => 'Notifikasi ditandai telah dibaca.',
+            'data' => $notification
+        ], 200);
     }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('notification::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('notification::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }
