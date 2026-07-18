@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import BottomNav from "@/components/layout/BottomNav";
+import TopNav from "@/components/layout/TopNav";
 
-// 2. Kita inisialisasi font Inter sesuai desain AI Google Stitch
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter", // Variable ini nyambung ke Tailwind v4 kita nanti
-});
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "TraceBack | Lost & Found UISI",
@@ -22,14 +18,12 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body
-        className={`${inter.variable} antialiased font-sans`}
+        className={`${inter.variable} antialiased font-sans bg-background dark:bg-background-dark text-gray-900 dark:text-gray-100`}
         suppressHydrationWarning
       >
-        {/* Main Wrapper: Max-width untuk meniru tampilan Mobile di layar desktop */}
-        <main className="max-w-md mx-auto min-h-screen bg-background dark:bg-background-dark relative shadow-2xl overflow-x-hidden pb-24">
-          {children}
-          <BottomNav />
-        </main>
+        <TopNav />
+        {/* HAPUS max-w-md, biarkan main mengalir bebas (Full Width) */}
+        <main className="min-h-screen">{children}</main>
       </body>
     </html>
   );
