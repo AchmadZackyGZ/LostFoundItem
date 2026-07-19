@@ -44,8 +44,8 @@ export default function Home() {
       try {
         // Asumsi nama endpoint API yang akan kita buat di Laravel nanti
         const [statsResponse, itemsResponse] = await Promise.all([
-          api.get("/api/dashboard/stats"),
-          api.get("/api/items/recent"),
+          api.get("/api/v1/dashboard/stats"),
+          api.get("/api/v1/items/recent"),
         ]);
 
         setStats(statsResponse.data);
