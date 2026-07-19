@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import axios from "@/lib/axios";
 
-// Struktur data User
+// Sesuaikan struktur User dengan response database Laravel Anda
 interface User {
   id: number;
   name: string;
   email: string;
-  role: string;
-  department: string;
+  nim?: string;
+  role?: string;
+  department?: string;
 }
 
 interface AuthState {
@@ -15,10 +16,11 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
 
-  // Fungsi-fungsi aksi
-  login: (userData: User) => void;
-  logout: () => void;
-  checkAuth: () => Promise<void>; // Untuk cek sesi saat web pertama kali dibuka
+  // Fungsi-fungsi aksi yang sekarang berbasis Promise (async)
+  login: (credentials: Record<string, string>) => Promise<void>;
+  register: (userData: Record<string, string>) => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -26,27 +28,49 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
 
-  // Sementara kita buat versi "Dummy" yang siap diganti dengan call API Axios
-  login: (userData) => {
-    set({ user: userData, isAuthenticated: true });
+  login: async (credentials) => {
+    await axios.get("/sanctum/csrf-cookie");
+
+    // Tembak API Login dan langsung tangkap data user dari response-nya
+    const { data } = await axios.post("/api/auth/login", credentials);
+
+    // Simpan data user ke state TANPA perlu menembak /me lagi
+    // Asumsinya respon Laravel Anda: { message: "Login berhasil", user: { ... } }
+    set({ user: data.user, isAuthenticated: true });
   },
 
-  logout: () => {
-    set({ user: null, isAuthenticated: false });
-    // Nanti ditambahkan: await axios.post('/logout');
+  register: async (userData) => {
+    await axios.get("/sanctum/csrf-cookie");
+
+    // TEMBAKAN DIREVISI: /api/auth/register
+    await axios.post("/api/auth/register", userData);
+
+    // HAPUS pemanggilan /api/auth/me di sini!
+    // Kita tidak bisa mengambil data user karena mereka belum memasukkan OTP.
+    // Biarkan promise ini selesai dengan sukses agar router.push('/verify-otp') bisa tereksekusi.
+    // set({ user: data, isAuthenticated: true });
+  },
+
+  logout: async () => {
+    try {
+      // TEMBAKAN DIREVISI: /api/auth/logout
+      await axios.post("/api/auth/logout");
+    } catch (error) {
+      console.error("Gagal logout di server:", error);
+    } finally {
+      set({ user: null, isAuthenticated: false });
+    }
   },
 
   checkAuth: async () => {
     set({ isLoading: true });
     try {
-      // Nanti ditambahkan: const res = await axios.get('/api/user');
-      // set({ user: res.data, isAuthenticated: true, isLoading: false });
-
-      // Simulasi loading sementara
-      setTimeout(() => {
-        set({ isLoading: false });
-      }, 500);
+      // TEMBAKAN DIREVISI: /api/auth/me
+      const { data } = await axios.get("/api/auth/me");
+      set({ user: data, isAuthenticated: true, isLoading: false });
     } catch (error) {
+      // 🔥 HAPUS console.error DI SINI AGAR TIDAK MUNCUL LAYAR MERAH
+      // Biarkan state menjadi false secara diam-diam saat user belum login
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
