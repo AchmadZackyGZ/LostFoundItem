@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import axios from "@/lib/axios";
 
-// Struktur data User
+// Sesuaikan struktur User dengan response database Laravel Anda
 interface User {
   id: number;
   name: string;
   email: string;
-  role: string;
-  department: string;
+  nim?: string;
+  role?: string;
+  department?: string;
 }
 
 interface AuthState {
@@ -15,10 +16,11 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
 
-  // Fungsi-fungsi aksi
-  login: (userData: User) => void;
-  logout: () => void;
-  checkAuth: () => Promise<void>; // Untuk cek sesi saat web pertama kali dibuka
+  // Fungsi-fungsi aksi yang sekarang berbasis Promise (async)
+  login: (credentials: Record<string, string>) => Promise<void>;
+  register: (userData: Record<string, string>) => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -26,27 +28,47 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
 
-  // Sementara kita buat versi "Dummy" yang siap diganti dengan call API Axios
-  login: (userData) => {
-    set({ user: userData, isAuthenticated: true });
+  login: async (credentials) => {
+    // 1. Ambil CSRF token untuk proteksi Sanctum
+    await axios.get("/sanctum/csrf-cookie");
+
+    // 2. Hit endpoint login (sesuaikan dengan route Laravel Anda, misal /api/login atau /login)
+    await axios.post("/api/login", credentials);
+
+    // 3. Jika berhasil, ambil data user saat ini
+    const { data } = await axios.get("/api/user");
+    set({ user: data, isAuthenticated: true });
   },
 
-  logout: () => {
-    set({ user: null, isAuthenticated: false });
-    // Nanti ditambahkan: await axios.post('/logout');
+  register: async (userData) => {
+    await axios.get("/sanctum/csrf-cookie");
+    // Hit endpoint register
+    await axios.post("/api/register", userData);
+
+    // Otomatis login setelah register berhasil
+    const { data } = await axios.get("/api/user");
+    set({ user: data, isAuthenticated: true });
+  },
+
+  logout: async () => {
+    try {
+      await axios.post("/api/logout");
+    } catch (error) {
+      console.error("Gagal logout di server:", error);
+    } finally {
+      // Bersihkan state di sisi client terlepas dari response server
+      set({ user: null, isAuthenticated: false });
+    }
   },
 
   checkAuth: async () => {
     set({ isLoading: true });
     try {
-      // Nanti ditambahkan: const res = await axios.get('/api/user');
-      // set({ user: res.data, isAuthenticated: true, isLoading: false });
-
-      // Simulasi loading sementara
-      setTimeout(() => {
-        set({ isLoading: false });
-      }, 500);
+      // Cek apakah user memiliki sesi valid saat me-refresh browser
+      const { data } = await axios.get("/api/user");
+      set({ user: data, isAuthenticated: true, isLoading: false });
     } catch (error) {
+      console.error("Gagal cek auth:", error);
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
