@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: "",
     nim: "",
+    department: "",
     email: "",
     password: "",
     password_confirmation: "",
@@ -21,10 +22,12 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Perbaikan tipe: Menggunakan Union Type (HTMLInputElement | HTMLSelectElement)
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -39,7 +42,7 @@ export default function RegisterPage() {
     try {
       // Tembak API Backend
       await register(formData);
-      router.push("/");
+      router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
     } catch (error: unknown) {
       // 👈 3. Gunakan axios.isAxiosError untuk memvalidasi tipe error
       if (axios.isAxiosError(error)) {
@@ -107,6 +110,38 @@ export default function RegisterPage() {
               className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-white"
               placeholder="Nomor Induk Mahasiswa"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
+              Program Studi
+            </label>
+            <select
+              name="department"
+              value={formData.department}
+              // Gunakan as any sementara jika TypeScript rewel karena parameter event select sedikit berbeda dengan input text
+              onChange={handleChange}
+              required
+              disabled={isLoading}
+              className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-white appearance-none cursor-pointer"
+            >
+              <option value="" disabled>
+                Pilih Program Studi
+              </option>
+              <option value="informatika">informatika</option>
+              <option value="Sistem Informasi">Sistem Informasi</option>
+              <option value="Desain Komunikasi Visual">
+                Desain Komunikasi Visual
+              </option>
+              <option value="Manajemen Rekayasa">Manajemen Rekayasa</option>
+              <option value="Management">management</option>
+              <option value="teknik kimia">teknik kimia</option>
+              <option value="teknik logistik">teknik logistik</option>
+              <option value="akutansi">akutansi</option>
+              <option value="Teknologi Industri Pertanian">
+                Teknologi Industri Pertanian
+              </option>
+              {/* Tambahkan opsi jurusan lain sesuai kebutuhan kampus Anda */}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
