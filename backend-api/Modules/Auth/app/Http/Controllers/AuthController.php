@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Modules\Auth\Emails\VerificationEmail;
 use Modules\Auth\Http\Requests\LoginRequest;
@@ -110,6 +111,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Silakan verifikasi email Anda terlebih dahulu.'], 403);
         }
 
+        // 🔥 TAMBAHKAN 2 BARIS INI: Ini kunci utama untuk SPA Authentication (Next.js)
+        // Mendaftarkan user ke session dan mencegah serangan session fixation
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        // Pembuatan token di bawah ini boleh tetap dibiarkan jika Anda 
+        // berencana membuat versi Mobile App (React Native/Flutter) nantinya.
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

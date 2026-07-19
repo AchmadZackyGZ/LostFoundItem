@@ -1,25 +1,22 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  // Nanti URL ini bisa diubah sesuai port backend Laravel Anda (biasanya 8000)
   baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000",
   headers: {
-    "X-Requested-With": "XMLHttpRequest",
+    "X-Requested-With": "XMLHttpRequest", // Wajib untuk Sanctum
     "Content-Type": "application/json",
     Accept: "application/json",
   },
-  // withCredentials SANGAT PENTING untuk Laravel Sanctum agar cookie sesi tersimpan
-  withCredentials: true,
+  withCredentials: true, // INI PALING KRUSIAL! Harus true agar Cookie terkirim.
+  withXSRFToken: true, // Tambahkan ini untuk Axios versi baru (v1.6+)
 });
 
 // Interceptor untuk menangani error global (misal: token expired / belum login)
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Logic jika user belum login/sesi habis (bisa redirect ke /login nanti)
-      console.warn("Unauthorized! Harap login kembali.");
-    }
+    // Kita biarkan Axios me-reject promise secara natural tanpa melakukan console.warn/error
+    // agar Next.js Dev Overlay tidak terpancing untuk muncul.
     return Promise.reject(error);
   },
 );

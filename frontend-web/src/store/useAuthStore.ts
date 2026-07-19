@@ -29,34 +29,35 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   login: async (credentials) => {
-    // 1. Ambil CSRF token untuk proteksi Sanctum
     await axios.get("/sanctum/csrf-cookie");
 
-    // 2. Hit endpoint login (sesuaikan dengan route Laravel Anda, misal /api/login atau /login)
-    await axios.post("/api/login", credentials);
+    // Tembak API Login dan langsung tangkap data user dari response-nya
+    const { data } = await axios.post("/api/auth/login", credentials);
 
-    // 3. Jika berhasil, ambil data user saat ini
-    const { data } = await axios.get("/api/user");
-    set({ user: data, isAuthenticated: true });
+    // Simpan data user ke state TANPA perlu menembak /me lagi
+    // Asumsinya respon Laravel Anda: { message: "Login berhasil", user: { ... } }
+    set({ user: data.user, isAuthenticated: true });
   },
 
   register: async (userData) => {
     await axios.get("/sanctum/csrf-cookie");
-    // Hit endpoint register
-    await axios.post("/api/register", userData);
 
-    // Otomatis login setelah register berhasil
-    const { data } = await axios.get("/api/user");
-    set({ user: data, isAuthenticated: true });
+    // TEMBAKAN DIREVISI: /api/auth/register
+    await axios.post("/api/auth/register", userData);
+
+    // HAPUS pemanggilan /api/auth/me di sini!
+    // Kita tidak bisa mengambil data user karena mereka belum memasukkan OTP.
+    // Biarkan promise ini selesai dengan sukses agar router.push('/verify-otp') bisa tereksekusi.
+    // set({ user: data, isAuthenticated: true });
   },
 
   logout: async () => {
     try {
-      await axios.post("/api/logout");
+      // TEMBAKAN DIREVISI: /api/auth/logout
+      await axios.post("/api/auth/logout");
     } catch (error) {
       console.error("Gagal logout di server:", error);
     } finally {
-      // Bersihkan state di sisi client terlepas dari response server
       set({ user: null, isAuthenticated: false });
     }
   },
@@ -64,11 +65,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAuth: async () => {
     set({ isLoading: true });
     try {
-      // Cek apakah user memiliki sesi valid saat me-refresh browser
-      const { data } = await axios.get("/api/user");
+      // TEMBAKAN DIREVISI: /api/auth/me
+      const { data } = await axios.get("/api/auth/me");
       set({ user: data, isAuthenticated: true, isLoading: false });
     } catch (error) {
-      console.error("Gagal cek auth:", error);
+      // 🔥 HAPUS console.error DI SINI AGAR TIDAK MUNCUL LAYAR MERAH
+      // Biarkan state menjadi false secara diam-diam saat user belum login
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
