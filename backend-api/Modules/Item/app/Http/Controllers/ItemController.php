@@ -110,6 +110,53 @@ class ItemController extends Controller
         ], 200);
     }
 
+    // --- FUNGSI BARU UNTCH DASHBOARD STATS ---
+    public function getDashboardStats(): JsonResponse
+    {
+        // Hitung total laporan aktif yang belum selesai/dikembalikan (Hilang & Ditemukan)
+        $reported = Item::whereIn('status', ['active'])->count();
+
+        // Misalkan Anda memiliki cara khusus melacak 'found', namun dari struktur Anda sepertinya
+        // bisa diambil dari tipe (type) laporan yang dilaporkan sebagai 'temuan'
+        $found = Item::where('type', 'temuan')->where('status', 'active')->count();
+
+        // Hitung total laporan yang sudah berstatus 'completed' (Selesai/Dikembalikan)
+        $returned = Item::where('status', 'completed')->count();
+
+        return response()->json([
+            'reported' => $reported,
+            'found' => $found,
+            'returned' => $returned
+        ], 200);
+    }
+
+    // --- FUNGSI BARU UNTUK 4 BARANG TERBARU DASHBOARD ---
+    public function getRecentItems(): JsonResponse
+    {
+        // Ambil 4 barang terbaru yang statusnya masih aktif
+        $items = Item::with('category')
+            ->where('status', 'active')
+            ->latest()
+            ->take(4)
+            ->get();
+
+        $mappedItems = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'title' => $item->title,
+                'location' => $item->location,
+                // Format waktu sederhana, bisa Anda sesuaikan menggunakan Carbon
+                'time' => $item->created_at->diffForHumans(),
+                'description' => $item->description,
+                'status' => 'Hilang', // Karena di tabel Anda status defaultnya 'active' 
+                'isUrgent' => (bool) $item->is_urgent,
+                'imageUrl' => $item->image_path ?? 'https://via.placeholder.com/400' // Gambar fallback
+            ];
+        });
+
+        return response()->json($mappedItems, 200);
+    }
+
     public function myItems(Request $request): JsonResponse
     {
         // Ambil ID user yang sedang login dari token
