@@ -34,6 +34,7 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
             'nim' => 'required|string|unique:users', // Komen dihapus
+            'department' => 'required|string',
         ]);
 
         $user = User::create([
@@ -42,6 +43,7 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'mahasiswa', // Default role sesuai PRD
+            'department' => $request->department,
         ]);
 
         $this->sendOtpEmail($user->email);
