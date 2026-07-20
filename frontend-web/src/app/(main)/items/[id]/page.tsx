@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleDashed,
   Clock,
+  Lock,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -34,7 +35,7 @@ interface ItemDetail {
   location: string;
   date: string;
   image_path: string | null;
-  status: string;
+  status: string; // Bisa berisi: 'pending', 'active', 'is_pending', 'completed'
   reporter: {
     name: string;
     email: string;
@@ -69,7 +70,7 @@ export default function ItemDetail() {
     }
   }, [id]);
 
-  // Fungsi untuk memformat tanggal bawaan ISO ke format yang mudah dibaca
+  // Fungsi format tanggal
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {
       year: "numeric",
@@ -97,8 +98,6 @@ export default function ItemDetail() {
     );
   }
 
-  // Ekstrak fitur dari deskripsi (karena sebelumnya input 'Ciri-ciri' digabung ke deskripsi)
-  // Menampilkan fitur dummy jika tidak ada pola spesifik, atau membiarkannya kosong.
   const features = item.description.includes("Ciri-ciri khusus:")
     ? item.description
         .split("Ciri-ciri khusus:")[1]
@@ -106,12 +105,59 @@ export default function ItemDetail() {
         .map((f) => f.trim())
     : [];
 
-  // Tentukan label status berdasarkan tipe (lost/temuan)
   const statusLabel = item.type === "lost" ? "Kehilangan" : "Temuan";
+
+  // --- LOGIKA STATE MACHINE PRD ---
+  const isPending = item.status === "pending";
+  const isActive = item.status === "active";
+  const isClaimPending = item.status === "is_pending";
+  const isCompleted = item.status === "completed";
+
+  // Menghitung panjang garis progress (Ada 3 jarak antar 4 node, masing-masing ~33%)
+  let progressWidth = "w-[0%]"; // Default (Pending: cuma node 1 yg nyala)
+  if (isActive || isClaimPending) progressWidth = "w-[66%]"; // Sampai node ke-3
+  if (isCompleted) progressWidth = "w-[100%]"; // Full sampai ujung
+
+  // Konfigurasi Tombol Klaim berdasarkan Status
+  let btnConfig = {
+    disabled: false,
+    text: "Ini Barang Saya (Klaim)",
+    style:
+      "bg-primary text-white hover:bg-blue-800 shadow-md shadow-blue-500/30",
+    icon: <Hand size={18} />,
+  };
+
+  if (isPending) {
+    btnConfig = {
+      disabled: true,
+      text: "Menunggu Validasi Admin",
+      style: "bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed",
+      icon: <Lock size={18} />,
+    };
+  } else if (isClaimPending) {
+    btnConfig = {
+      disabled: true,
+      text: "Klaim Sedang Diproses Admin",
+      style:
+        "bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-300 dark:border-gray-700",
+      icon: <Clock size={18} />,
+    };
+  } else if (isCompleted) {
+    btnConfig = {
+      disabled: true,
+      text: "Barang Telah Dikembalikan",
+      style:
+        "bg-gray-200 dark:bg-gray-800 text-gray-500 cursor-not-allowed opacity-75",
+      icon: <CheckCircle2 size={18} />,
+    };
+  }
+
+  // Jika barang sedang di-klaim/selesai, kita buat efek abu-abu pada gambar
+  const imageFilter =
+    isClaimPending || isCompleted ? "grayscale contrast-75 opacity-80" : "";
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-8">
-      {/* Tombol Back */}
       <Link
         href="/items"
         className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-6 transition-colors"
@@ -122,7 +168,6 @@ export default function ItemDetail() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* ================= KOLOM KIRI (Gambar & Detail) ================= */}
         <div className="w-full lg:w-3/5 space-y-6">
-          {/* Main Image Card */}
           <div className="bg-surface dark:bg-surface-dark rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-sm">
             <div className="relative h-80 md:h-[400px] w-full bg-gray-100 dark:bg-gray-900">
               <Image
@@ -133,7 +178,8 @@ export default function ItemDetail() {
                 alt={item.title}
                 fill
                 priority
-                className="object-cover"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                className={`object-cover transition-all duration-500 ${imageFilter}`}
               />
               <div className="absolute top-4 right-4">
                 <span
@@ -176,7 +222,6 @@ export default function ItemDetail() {
             </div>
           </div>
 
-          {/* Details Card */}
           <div className="bg-surface dark:bg-surface-dark rounded-2xl p-6 md:p-8 border border-gray-200 dark:border-gray-800 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
               Item Details
@@ -208,7 +253,6 @@ export default function ItemDetail() {
 
         {/* ================= KOLOM KANAN (Timeline & Diskusi) ================= */}
         <div className="w-full lg:w-2/5 space-y-6">
-          {/* Status & Claim Card */}
           <div className="bg-surface dark:bg-surface-dark rounded-2xl p-6 border border-gray-200 dark:border-gray-800 shadow-sm">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
               {item.title}
@@ -217,17 +261,16 @@ export default function ItemDetail() {
               <Clock size={14} /> Dilaporkan pada {formatDate(item.date)}
             </p>
 
-            {/* Timeline UI Dinamis */}
+            {/* TIMELINE UI SESUAI PRD */}
             <div className="flex items-start justify-between mb-10 relative mt-2">
               <div className="absolute top-[14px] left-4 right-4 h-[2px] bg-gray-200 dark:bg-gray-700/80 z-0"></div>
 
-              {/* Progress Line bergantung pada status */}
+              {/* Progress Line Dinamis */}
               <div
-                className={`absolute top-[14px] left-4 h-[2px] bg-primary dark:bg-blue-500 z-0 transition-all ${
-                  item.status === "completed" ? "w-[100%]" : "w-[60%]"
-                }`}
+                className={`absolute top-[14px] left-4 h-[2px] bg-primary dark:bg-blue-500 z-0 transition-all duration-700 ease-in-out ${progressWidth}`}
               ></div>
 
+              {/* Node 1: Reported (Selalu Nyala) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div className="w-7 h-7 rounded-full bg-primary dark:bg-blue-500 text-white flex items-center justify-center shadow-md">
                   <CheckCircle2 size={16} strokeWidth={3} />
@@ -237,75 +280,86 @@ export default function ItemDetail() {
                 </span>
               </div>
 
+              {/* Node 2: Verified (Nyala jika BUKAN pending) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
-                <div className="w-7 h-7 rounded-full bg-primary dark:bg-blue-500 text-white flex items-center justify-center shadow-md">
-                  <CheckCircle2 size={16} strokeWidth={3} />
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                    !isPending
+                      ? "bg-primary dark:bg-blue-500 text-white shadow-md"
+                      : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
+                  }`}
+                >
+                  {!isPending && <CheckCircle2 size={16} strokeWidth={3} />}
                 </div>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-200">
+                <span
+                  className={`text-xs font-bold ${!isPending ? "text-gray-900 dark:text-gray-200" : "text-gray-400"}`}
+                >
                   Verified
                 </span>
               </div>
 
+              {/* Node 3: Searching/Found (Nyala jika BUKAN pending) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                    item.status === "completed"
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                    isCompleted
                       ? "bg-primary dark:bg-blue-500 text-white shadow-md"
-                      : "bg-surface dark:bg-surface-dark border-[3px] border-primary dark:border-blue-500"
+                      : !isPending
+                        ? "bg-surface dark:bg-surface-dark border-[3px] border-primary dark:border-blue-500"
+                        : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
                   }`}
                 >
-                  {item.status === "completed" ? (
+                  {isCompleted ? (
                     <CheckCircle2 size={16} strokeWidth={3} />
                   ) : (
-                    <div className="w-2.5 h-2.5 bg-primary dark:bg-blue-500 rounded-full"></div>
+                    !isPending && (
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full ${isClaimPending ? "bg-yellow-500 animate-pulse" : "bg-primary dark:bg-blue-500"}`}
+                      ></div>
+                    )
                   )}
                 </div>
-                <span className="text-xs font-bold text-primary dark:text-blue-400">
+                <span
+                  className={`text-xs font-bold ${!isPending ? "text-primary dark:text-blue-400" : "text-gray-400"}`}
+                >
                   {item.type === "lost" ? "Searching" : "Found"}
                 </span>
               </div>
 
+              {/* Node 4: Claimed (Hanya nyala saat completed) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                    item.status === "completed"
-                      ? "bg-surface dark:bg-surface-dark border-[3px] border-primary dark:border-blue-500"
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                    isCompleted
+                      ? "bg-primary dark:bg-blue-500 text-white shadow-md"
                       : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
                   }`}
                 >
-                  {item.status === "completed" && (
-                    <div className="w-2.5 h-2.5 bg-primary dark:bg-blue-500 rounded-full"></div>
-                  )}
+                  {isCompleted && <CheckCircle2 size={16} strokeWidth={3} />}
                 </div>
                 <span
-                  className={`text-xs font-medium ${item.status === "completed" ? "text-primary dark:text-blue-400" : "text-gray-400 dark:text-gray-500"}`}
+                  className={`text-xs font-bold ${isCompleted ? "text-primary dark:text-blue-400" : "text-gray-400 dark:text-gray-500"}`}
                 >
                   Claimed
                 </span>
               </div>
             </div>
 
-            {/* Tombol Klaim */}
+            {/* Tombol Klaim Dinamis */}
             <button
-              disabled={item.status === "completed"}
-              className={`w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md ${
-                item.status === "completed"
-                  ? "bg-gray-400 cursor-not-allowed text-white"
-                  : "bg-primary text-white hover:bg-blue-800"
-              }`}
+              disabled={btnConfig.disabled}
+              className={`w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors ${btnConfig.style}`}
             >
-              <Hand size={18} />
-              {item.status === "completed"
-                ? "Barang Sudah Diklaim"
-                : "Ini Barang Saya (Klaim)"}
+              {btnConfig.icon}
+              {btnConfig.text}
             </button>
             <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-4 px-4 leading-relaxed">
-              Anda wajib melampirkan bukti kepemilikan yang sah saat melakukan
-              klaim.
+              {isClaimPending || isCompleted
+                ? "Aksi pada barang ini telah dibatasi oleh sistem."
+                : "Anda wajib melampirkan bukti kepemilikan yang sah saat melakukan klaim."}
             </p>
           </div>
 
-          {/* Discussion / Chat Modul Dinamis */}
           <div className="bg-surface dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col h-[400px]">
             <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20 rounded-t-2xl">
               <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -316,7 +370,6 @@ export default function ItemDetail() {
               </span>
             </div>
 
-            {/* Area Chat */}
             <div className="flex-grow p-4 overflow-y-auto space-y-4 no-scrollbar">
               {item.discussions.length === 0 ? (
                 <div className="flex justify-center items-center h-full text-sm text-gray-500">
@@ -364,21 +417,22 @@ export default function ItemDetail() {
               )}
             </div>
 
-            {/* Input Chat */}
             <div className="p-4 border-t border-gray-100 dark:border-gray-800">
               <div className="relative">
                 <input
                   type="text"
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Tulis pesan..."
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-primary dark:focus:border-blue-500 text-gray-900 dark:text-white transition-colors"
+                  placeholder={
+                    isCompleted ? "Diskusi telah ditutup." : "Tulis pesan..."
+                  }
+                  disabled={isCompleted}
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-primary dark:focus:border-blue-500 text-gray-900 dark:text-white transition-colors disabled:opacity-50"
                 />
                 <button
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-blue-700 p-2 transition-colors disabled:opacity-50"
-                  disabled={!chatMessage.trim()}
+                  disabled={!chatMessage.trim() || isCompleted}
                   onClick={() => {
-                    // TODO: Tembak endpoint POST /api/v1/items/{id}/discussions disini
                     console.log("Kirim pesan:", chatMessage);
                     setChatMessage("");
                   }}

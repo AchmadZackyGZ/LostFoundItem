@@ -37,10 +37,14 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 */
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
 
+    // 🔥 RUTE BARU: Validasi Laporan Barang
+    Route::get('/items/pending', [ItemController::class, 'getPendingItems']);
+
     // Lihat semua antrean klaim
     Route::get('/claims', [AdminClaimController::class, 'index']);
 
     // Tombol Setuju & Tolak Klaim
     Route::put('/claims/{id}/approve', [AdminClaimController::class, 'approve']);
     Route::put('/claims/{id}/reject', [AdminClaimController::class, 'reject']);
+    Route::put('/items/{id}/approve', [ItemController::class, 'approvePendingItem']);
 });

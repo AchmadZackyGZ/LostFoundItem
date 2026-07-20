@@ -12,22 +12,6 @@ use Modules\Item\Models\Item;
 class ClaimController extends Controller
 {
     /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        return view('item::index');
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return view('item::create');
-    }
-
-    /**
      * Store a newly created resource in storage.
      */
     public function store(StoreClaimRequest $request, string $itemId): JsonResponse
@@ -74,7 +58,7 @@ class ClaimController extends Controller
 
         // 2. Ubah status barang menjadi pending_claim (Mengunci barang)
         $item->update([
-            'status' => 'pending_claim'
+            'status' => 'is_pending'
         ]);
 
         return response()->json([
@@ -110,30 +94,4 @@ class ClaimController extends Controller
             'data' => $mappedClaims
         ], 200);
     }
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('item::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('item::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }
