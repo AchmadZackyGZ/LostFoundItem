@@ -14,7 +14,7 @@ interface DashboardStats {
 }
 
 interface Item {
-  id: string | number;
+  id: string;
   title: string;
   location: string;
   time: string; // atau created_at yang nanti diformat
@@ -108,6 +108,8 @@ export default function Home() {
             ) : recentItems.length > 0 ? (
               // Menampilkan item pertama yang paling baru (dan urgent jika ada)
               <ItemCard
+                key={recentItems[0].id}
+                id={recentItems[0].id}
                 variant="horizontal"
                 title={recentItems[0].title}
                 location={recentItems[0].location}
@@ -175,6 +177,7 @@ export default function Home() {
                   .map((item) => (
                     <ItemCard
                       key={item.id}
+                      id={item.id}
                       title={item.title}
                       location={item.location}
                       time={item.time}
@@ -187,9 +190,12 @@ export default function Home() {
 
         {/* Tombol Lihat Semua */}
         <div className="pt-8 flex justify-center pb-12">
-          <button className="px-6 py-2.5 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+          <Link
+            href="/report"
+            className="px-6 py-2.5 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+          >
             Lihat Semua Laporan
-          </button>
+          </Link>
         </div>
       </div>
     </div>
