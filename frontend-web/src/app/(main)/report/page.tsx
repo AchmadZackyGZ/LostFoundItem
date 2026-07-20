@@ -17,6 +17,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import api from "@/lib/axios";
 import axios from "axios";
+import { useEffect } from "react";
 
 function ReportFormContent() {
   const searchParams = useSearchParams();
@@ -36,6 +37,14 @@ function ReportFormContent() {
     location: "",
     description: "",
   });
+
+  // STATE BARU UNTUK KATEGORI DINAMIS
+  interface Category {
+    id: string;
+    name: string;
+  }
+
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // State untuk Ciri-ciri Khusus (Tag Input)
   const [features, setFeatures] = useState<string[]>([]);
@@ -64,6 +73,18 @@ function ReportFormContent() {
       setFeatureInput("");
     }
   };
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await api.get("/api/v1/categories");
+        setCategories(response.data);
+      } catch (error) {
+        console.error("Gagal memuat kategori:", error);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   const removeFeature = (tagToRemove: string) => {
     setFeatures(features.filter((tag) => tag !== tagToRemove));
@@ -116,7 +137,11 @@ function ReportFormContent() {
 
       // Kita WAJIB pakai FormData karena ada pengiriman File Gambar
       const submitData = new FormData();
-      submitData.append("type", reportType);
+
+      // Mapping ke bahasa Inggris agar lolos validasi "in:lost,found"
+      const backendType = reportType === "kehilangan" ? "lost" : "found";
+      submitData.append("type", backendType);
+
       submitData.append("title", formData.title);
       submitData.append("category_id", formData.category_id);
       submitData.append("date", formData.date);
@@ -127,9 +152,13 @@ function ReportFormContent() {
         submitData.append("image", image);
       }
 
-      // Tembak ke Backend
+      // Kembali gunakan `api` agar CSRF Sanctum bekerja otomatis!
       await api.post("/api/v1/items", submitData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          // 🔥 TRIK RAHASIA: Set ke undefined agar Axios membuang header JSON bawaannya.
+          // Browser akan otomatis menggantinya menjadi multipart/form-data beserta boundary-nya!
+          "Content-Type": undefined,
+        },
       });
 
       // Jika sukses, lempar user kembali ke Dasbor
@@ -223,11 +252,13 @@ function ReportFormContent() {
                     className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 appearance-none"
                   >
                     <option value="">Pilih Kategori</option>
-                    {/* Sesuaikan Value ini dengan ID di tabel categories backend Anda */}
-                    <option value="1">Elektronik</option>
-                    <option value="2">Dokumen</option>
-                    <option value="3">Kendaraan</option>
-                    <option value="4">Lainnya</option>
+
+                    {/* Render opsi kategori secara dinamis dari database */}
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -436,13 +467,16 @@ function ReportFormContent() {
                     name="category_id"
                     value={formData.category_id}
                     onChange={handleChange}
-                    className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-gray-900 dark:text-gray-200 appearance-none"
+                    className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 appearance-none"
                   >
                     <option value="">Pilih Kategori</option>
-                    <option value="1">Elektronik</option>
-                    <option value="2">Dokumen</option>
-                    <option value="3">Kendaraan</option>
-                    <option value="4">Lainnya</option>
+
+                    {/* Render opsi kategori secara dinamis dari database */}
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

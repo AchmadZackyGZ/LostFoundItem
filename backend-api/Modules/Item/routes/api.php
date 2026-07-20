@@ -15,6 +15,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::get('/dashboard/stats', [ItemController::class, 'getDashboardStats']);
     Route::get('/items/recent', [ItemController::class, 'getRecentItems']);
 
+    // Tambahkan baris ini
+    Route::get('/categories', [ItemController::class, 'getCategories']);
+
     Route::apiResource('items', ItemController::class)->names('item');
     Route::post('/', [ItemController::class, 'store']); // buat laporan 
     Route::get('/', [ItemController::class, 'index']); // ambil semua laporan 

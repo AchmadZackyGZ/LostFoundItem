@@ -130,6 +130,17 @@ class ItemController extends Controller
         ], 200);
     }
 
+    // --- FUNGSI AMBIL KATEGORI DINAMIS ---
+    public function getCategories(): \Illuminate\Http\JsonResponse
+    {
+        // Ambil semua kategori, urutkan berdasarkan abjad nama
+        $categories = \Modules\Item\Models\Category::select('id', 'name')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json($categories, 200);
+    }
+
     // --- FUNGSI BARU UNTUK 4 BARANG TERBARU DASHBOARD ---
     public function getRecentItems(): JsonResponse
     {
