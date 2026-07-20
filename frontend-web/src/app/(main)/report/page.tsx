@@ -152,6 +152,12 @@ function ReportFormContent() {
         submitData.append("image", image);
       }
 
+      // 🔑 WAJIB: minta CSRF cookie dulu sebelum request stateful
+      await axios.get(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/sanctum/csrf-cookie`,
+        { withCredentials: true },
+      );
+
       // Kembali gunakan `api` agar CSRF Sanctum bekerja otomatis!
       await api.post("/api/v1/items", submitData, {
         headers: {

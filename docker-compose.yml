@@ -31,6 +31,9 @@ services:
       - ./backend-api:/var/www/html
     ports:
       - "8000:8000" # JALAN PINTAS EMAS: Buka pintu langsung ke Windows!
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     networks:
       - lostfound_net
 
