@@ -57,4 +57,9 @@ interface NotificationServiceInterface
         object $itemOwner,
         array $discussionData,
     ): void;
+
+    /*
+     * Kirim notifikasi ke user tertentu.
+     */
+    public function send(string $userId, string $title, string $message): void;
 }
