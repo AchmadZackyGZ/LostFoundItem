@@ -7,21 +7,22 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
+import Image from "next/image";
 
 interface ItemCardProps {
-  id?: string; // ID untuk routing ke halaman detail nanti
+  id: string; // 🔥 WAJIB DIISI: Hapus tanda '?' agar tidak bisa dikosongi
   variant?: "vertical" | "horizontal";
   title: string;
   location: string;
   time: string;
   description?: string;
-  status: "Hilang" | "Menunggu Validasi" | "Selesai";
+  status: "Hilang" | "Menunggu Validasi" | "Selesai" | string; // Tambahkan 'string' agar lebih fleksibel menerima data API
   imageUrl: string;
   isUrgent?: boolean;
 }
 
 export default function ItemCard({
-  id = "1",
+  id, // 🔥 Hapus default = "1" agar komponen induk dipaksa mengirim UUID asli
   variant = "vertical",
   title,
   location,
@@ -31,22 +32,31 @@ export default function ItemCard({
   imageUrl,
   isUrgent,
 }: ItemCardProps) {
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     Hilang:
       "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800",
     "Menunggu Validasi":
       "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800",
     Selesai:
       "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800",
+    // Tambahan fallback untuk status dari backend
+    active:
+      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800",
   };
+
+  // Mengambil warna berdasarkan status, fallback ke warna abu-abu jika tidak ada
+  const currentStatusColor =
+    statusColors[status] || "bg-gray-100 text-gray-700 border border-gray-200";
 
   if (variant === "horizontal") {
     return (
       <div className="flex flex-col sm:flex-row bg-surface dark:bg-surface-dark rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 transition-all hover:shadow-lg dark:hover:shadow-blue-900/10 h-full">
-        <div className="relative w-full sm:w-2/5 h-48 sm:h-auto">
-          <img
-            src={imageUrl}
+        <div className="relative w-full sm:w-2/5 h-48 sm:h-auto bg-gray-100 dark:bg-gray-800">
+          <Image
+            src={imageUrl || "https://via.placeholder.com/400?text=No+Image"}
             alt={title}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className="w-full h-full object-cover"
           />
           {isUrgent && (
@@ -60,8 +70,8 @@ export default function ItemCard({
             <div className="flex justify-between items-start mb-3">
               <span
                 className={clsx(
-                  "text-xs font-bold px-2.5 py-1 rounded-full",
-                  statusColors[status],
+                  "text-xs font-bold px-2.5 py-1 rounded-full capitalize",
+                  currentStatusColor,
                 )}
               >
                 {status}
@@ -93,17 +103,19 @@ export default function ItemCard({
 
   return (
     <div className="flex flex-col bg-surface dark:bg-surface-dark rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 transition-all hover:shadow-lg dark:hover:shadow-blue-900/10 h-full">
-      <div className="relative h-48 w-full flex-shrink-0">
-        <img
-          src={imageUrl}
+      <div className="relative h-48 w-full flex-shrink-0 bg-gray-100 dark:bg-gray-800">
+        <Image
+          src={imageUrl || "https://via.placeholder.com/400?text=No+Image"}
           alt={title}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="w-full h-full object-cover"
         />
         <div className="absolute top-4 right-4">
           <span
             className={clsx(
-              "text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-md",
-              statusColors[status],
+              "text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-md capitalize",
+              currentStatusColor,
             )}
           >
             {status === "Selesai" && <CheckCircle2 size={14} />}
