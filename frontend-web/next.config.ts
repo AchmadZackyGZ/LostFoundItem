@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
         hostname: "via.placeholder.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "placehold.co", // kalau kamu pindah pakai placehold.co
+      },
     ],
   },
 };
