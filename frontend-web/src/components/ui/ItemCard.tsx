@@ -35,6 +35,8 @@ export default function ItemCard({
   const statusColors: Record<string, string> = {
     Hilang:
       "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800",
+    Ditemukan:
+      "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border border-teal-200 dark:border-teal-800",
     "Menunggu Validasi":
       "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800",
     Selesai:

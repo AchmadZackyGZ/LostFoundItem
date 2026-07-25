@@ -21,10 +21,41 @@ class ItemController extends Controller
     }
 
     // get all seluruh daftar laporan barang
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         // 🔥 TAMBAHKAN FILTER: Hanya ambil yang BUKAN pending
-        $items = Item::with('category')->where('status', '!=', 'pending')->latest()->get();
+        $query = Item::with('category')->where('status', '!=', 'pending');
+
+        // Filter Pencarian (Nama, Lokasi, Deskripsi, ID)
+        if ($request->filled('search')) {
+            $search = strtolower($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(title) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(location) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$search}%"])
+                  ->orWhere('id', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter Kategori
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->input('category_id'));
+        }
+
+        // Filter Status (active, is_pending, completed)
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Filter Tipe (lost / found atau kehilangan / temuan)
+        if ($request->filled('type')) {
+            $type = strtolower($request->input('type'));
+            if ($type === 'kehilangan') $type = 'lost';
+            if ($type === 'temuan') $type = 'found';
+            $query->where('type', $type);
+        }
+
+        $items = $query->latest()->get();
 
         // Mapping data untuk menggabungkan dengan data User (Pelapor)
         $mappedItems = $items->map(function ($item) {
@@ -36,6 +67,7 @@ class ItemController extends Controller
                 'type' => $item->type,
                 'title' => $item->title,
                 'category' => $item->category->name ?? 'Tanpa Kategori',
+                'category_id' => $item->category_id,
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
@@ -43,6 +75,7 @@ class ItemController extends Controller
                 'status' => $item->status,
                 'is_urgent' => $item->is_urgent,
                 'created_at' => $item->created_at,
+                'time' => $item->created_at ? $item->created_at->diffForHumans() : '',
                 // Gabungkan data user ke dalam respons
                 'reporter' => [
                     'id' => $user['id'] ?? null,
