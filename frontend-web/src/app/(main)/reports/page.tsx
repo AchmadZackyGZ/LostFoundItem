@@ -1,30 +1,79 @@
-import { Plus, ClipboardList, CheckCircle2, TrendingUp } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  Plus,
+  ClipboardList,
+  CheckCircle2,
+  Clock,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
+import api from "@/lib/axios";
+import Image from "next/image";
+
+// Interface sesuai dengan mapping backend di myItems
+interface MyItem {
+  id: string;
+  type: string;
+  title: string;
+  category: string;
+  status: string;
+  date: string;
+  image_path?: string; // Ditambahkan opsional karena di backend sebelumnya belum di-map
+}
 
 export default function ReportsPage() {
-  const reports = [
-    {
-      id: 1,
-      title: "Black Leather Wallet",
-      type: "Kehilangan",
-      date: "Dilaporkan pada 24 Okt 2023",
-      location: "Perpustakaan Utama",
-      status: "Aktif",
-      imageUrl:
-        "https://images.unsplash.com/photo-1627123424574-724758594e93?q=80&w=200&auto=format&fit=crop",
-    },
-    {
-      id: 2,
-      title: "Silver MacBook Pro",
-      type: "Temuan",
-      date: "Dilaporkan pada 20 Okt 2023",
-      location: "Kantin Area B",
-      status: "Selesai",
-      imageUrl:
-        "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?q=80&w=200&auto=format&fit=crop",
-    },
-  ];
+  const [reports, setReports] = useState<MyItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Tarik data laporan dari API
+  useEffect(() => {
+    const fetchMyItems = async () => {
+      try {
+        const response = await api.get("/api/v1/my-items");
+        setReports(response.data.data);
+      } catch (error) {
+        console.error("Gagal mengambil data laporan:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMyItems();
+  }, []);
+
+  // Hitung Statistik secara Dinamis
+  const activeCount = reports.filter(
+    (r) => r.status === "active" || r.status === "is_pending",
+  ).length;
+  const completedCount = reports.filter((r) => r.status === "completed").length;
+  const pendingCount = reports.filter((r) => r.status === "pending").length;
+
+  // Konfigurasi Label Status berdasarkan PRD
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case "pending":
+        return { label: "Menunggu Validasi", dot: "bg-yellow-500" };
+      case "active":
+        return { label: "Aktif di Publik", dot: "bg-blue-500" };
+      case "is_pending":
+        return { label: "Sedang Diklaim", dot: "bg-purple-500" };
+      case "completed":
+        return { label: "Selesai", dot: "bg-green-500" };
+      default:
+        return { label: status, dot: "bg-gray-500" };
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-[70vh] text-gray-900 dark:text-white">
+        <Loader2 className="animate-spin mr-2" /> Memuat daftar laporan...
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-10 max-w-5xl">
@@ -39,7 +88,7 @@ export default function ReportsPage() {
           </p>
         </div>
         <Link
-          href="/report"
+          href="/report?tab=kehilangan"
           className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-800 transition flex items-center gap-2 shadow-sm"
         >
           <Plus size={18} /> Lapor Baru
@@ -56,7 +105,18 @@ export default function ReportsPage() {
             />
             <span className="font-medium text-sm">Laporan Aktif</span>
           </div>
-          <p className="text-4xl font-bold text-gray-900 dark:text-white">3</p>
+          <p className="text-4xl font-bold text-gray-900 dark:text-white">
+            {activeCount}
+          </p>
+        </div>
+        <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4 text-gray-600 dark:text-gray-400">
+            <Clock size={20} className="text-yellow-600 dark:text-yellow-500" />
+            <span className="font-medium text-sm">Menunggu Validasi</span>
+          </div>
+          <p className="text-4xl font-bold text-gray-900 dark:text-white">
+            {pendingCount}
+          </p>
         </div>
         <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4 text-gray-600 dark:text-gray-400">
@@ -66,19 +126,9 @@ export default function ReportsPage() {
             />
             <span className="font-medium text-sm">Laporan Selesai</span>
           </div>
-          <p className="text-4xl font-bold text-gray-900 dark:text-white">12</p>
-        </div>
-        <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-4 text-gray-600 dark:text-gray-400">
-            <TrendingUp size={20} className="text-primary dark:text-blue-400" />
-            <span className="font-medium text-sm">Tingkat Pemulihan</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <p className="text-4xl font-bold text-gray-900 dark:text-white">
-              80%
-            </p>
-            <span className="text-sm text-gray-500">Bulan ini</span>
-          </div>
+          <p className="text-4xl font-bold text-gray-900 dark:text-white">
+            {completedCount}
+          </p>
         </div>
       </div>
 
@@ -86,68 +136,76 @@ export default function ReportsPage() {
       <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
         <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-            Laporan Terbaru
+            Riwayat Laporan Terbaru
           </h2>
         </div>
 
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {reports.map((report) => (
-            <div
-              key={report.id}
-              className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-            >
-              <div className="flex gap-5 items-center">
-                <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700">
-                  <img
-                    src={report.imageUrl}
-                    alt={report.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-bold text-gray-900 dark:text-white text-base">
-                      {report.title}
-                    </h3>
-                    <span
-                      className={clsx(
-                        "text-[10px] font-bold px-2 py-0.5 rounded-md",
-                        report.type === "Kehilangan"
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-                      )}
-                    >
-                      {report.type}
+        {reports.length === 0 ? (
+          <div className="p-10 text-center text-gray-500">
+            Anda belum pernah membuat laporan barang.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {reports.map((report) => {
+              const statusConfig = getStatusConfig(report.status);
+
+              return (
+                <Link
+                  href={`/items/${report.id}`} // Supaya card-nya bisa diklik
+                  key={report.id}
+                  className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer block"
+                >
+                  <div className="flex gap-5 items-center">
+                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700 relative">
+                      <Image
+                        src={
+                          report.image_path ||
+                          "https://via.placeholder.com/150?text=No+Image"
+                        }
+                        alt={report.title}
+                        fill
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                          {report.title}
+                        </h3>
+                        <span
+                          className={clsx(
+                            "text-[10px] font-bold px-2 py-0.5 rounded-md",
+                            report.type === "lost"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                          )}
+                        >
+                          {report.type === "lost" ? "Kehilangan" : "Temuan"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Dilaporkan pada{" "}
+                        {new Date(report.date).toLocaleDateString("id-ID")} •
+                        Kategori: {report.category}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                      <span
+                        className={clsx(
+                          "w-2 h-2 rounded-full",
+                          statusConfig.dot,
+                        )}
+                      ></span>
+                      {statusConfig.label}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {report.date} • {report.location}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0">
-                <span
-                  className={clsx(
-                    "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border",
-                    report.status === "Aktif"
-                      ? "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                      : "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
-                  )}
-                >
-                  <span
-                    className={clsx(
-                      "w-2 h-2 rounded-full",
-                      report.status === "Aktif"
-                        ? "bg-blue-600 dark:bg-blue-400"
-                        : "bg-gray-500 dark:bg-gray-400",
-                    )}
-                  ></span>
-                  {report.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -167,7 +167,13 @@ function ReportFormContent() {
         },
       });
 
-      // Jika sukses, lempar user kembali ke Dasbor
+      // 🔥 PERUBAHAN DISINI: Tambahkan notifikasi UX sesuai PRD
+      window.alert(
+        "Laporan berhasil dikirim! Laporan Anda sedang dalam antrean validasi Admin sebelum ditampilkan di dasbor publik.",
+      );
+
+      // Jika Anda sudah punya halaman profil, lebih baik diarahkan ke "/profile".
+      // Tapi untuk sekarang kita arahkan ke "/" sesuai kode awal Anda.
       router.push("/");
     } catch (error: unknown) {
       const message = axios.isAxiosError(error)

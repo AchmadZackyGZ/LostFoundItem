@@ -185,6 +185,7 @@ class ItemController extends Controller
                 'id' => $item->id,
                 'type' => $item->type,
                 'title' => $item->title,
+                'image_path' => $item->image_path,
                 'category' => $item->category->name ?? 'Tanpa Kategori',
                 'status' => $item->status,
                 'date' => $item->date,
