@@ -40,4 +40,16 @@ class NotificationController extends Controller
             'data' => $notification
         ], 200);
     }
+
+    // 3. TANDAI SEMUA NOTIFIKASI SUDAH DIBACA
+    public function markAllAsRead(Request $request): JsonResponse
+    {
+        AppNotification::where('user_id', $request->user()->id)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        return response()->json([
+            'message' => 'Semua notifikasi ditandai telah dibaca.'
+        ], 200);
+    }
 }
