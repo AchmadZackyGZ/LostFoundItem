@@ -8,16 +8,21 @@ use Illuminate\Http\Request;
 use Modules\Item\Http\Requests\StoreItemRequest;
 use Modules\Item\Models\Item;
 use Modules\Auth\Contracts\AuthClientInterface; // <-- Import Interface dari Modul Auth
+use Modules\Notification\Contracts\NotificationServiceInterface; // <-- Import Interface dari Modul Notification
 
 class ItemController extends Controller
 {
 
     private AuthClientInterface $authClient;
+    private NotificationServiceInterface $notificationService;
 
     // Suntikkan Interface via Constructor (Dependency Injection)
-    public function __construct(AuthClientInterface $authClient)
-    {
+    public function __construct(
+        AuthClientInterface $authClient,
+        NotificationServiceInterface $notificationService
+    ) {
         $this->authClient = $authClient;
+        $this->notificationService = $notificationService;
     }
 
     // get all seluruh daftar laporan barang
@@ -367,6 +372,15 @@ class ItemController extends Controller
             'is_urgent' => false,
         ]);
 
+        // 3. Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $request->user()->id,
+            $item->type === 'lost' ? 'Laporan Barang Hilang Dibuat' : 'Laporan Barang Temuan Dibuat',
+            "Anda melaporkan " . ($item->type === 'lost' ? 'kehilangan' : 'penemuan') . " {$item->title} di area {$item->location}.",
+            'report',
+            "/items/{$item->id}"
+        );
+
         return response()->json([
             'message' => 'Laporan berhasil dibuat.',
             'data' => $item
@@ -419,6 +433,15 @@ class ItemController extends Controller
 
         // Ubah status menjadi active agar tayang di dasbor publik
         $item->update(['status' => 'active']);
+
+        // Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $item->user_id,
+            'Laporan Barang Disetujui',
+            "Laporan anda untuk {$item->title} telah diverifikasi dan disetujui oleh admin.",
+            'report',
+            "/items/{$item->id}"
+        );
 
         return response()->json([
             'message' => 'Laporan barang berhasil disetujui dan tayang di publik.',

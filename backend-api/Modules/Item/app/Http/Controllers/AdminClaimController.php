@@ -5,9 +5,17 @@ namespace Modules\Item\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Modules\Item\Models\Claim;
+use Modules\Notification\Contracts\NotificationServiceInterface;
 
 class AdminClaimController extends Controller
 {
+    private NotificationServiceInterface $notificationService;
+
+    public function __construct(NotificationServiceInterface $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     // 1. LIHAT SEMUA KLAIM (Hanya untuk Admin)
     public function index(): JsonResponse
     {
@@ -35,6 +43,17 @@ class AdminClaimController extends Controller
         // Ubah status barang utama jadi 'completed' (Selesai/Sudah dikembalikan)
         $claim->item->update(['status' => 'completed']);
 
+        // Kirim Notifikasi via Contract (Modular Monolith)
+        if ($claim->item) {
+            $this->notificationService->send(
+                $claim->user_id,
+                'Klaim Barang Disetujui',
+                "Klaim anda untuk {$claim->item->title} telah diverifikasi dan disetujui oleh admin.",
+                'claim',
+                "/items/{$claim->item_id}"
+            );
+        }
+
         return response()->json([
             'message' => 'Klaim berhasil DISETUJUI. Status barang telah diperbarui menjadi Selesai.',
             'data' => $claim
@@ -55,6 +74,17 @@ class AdminClaimController extends Controller
 
         // KEMBALIKAN status barang menjadi 'active' agar bisa diklaim oleh orang lain
         $claim->item->update(['status' => 'active']);
+
+        // Kirim Notifikasi via Contract (Modular Monolith)
+        if ($claim->item) {
+            $this->notificationService->send(
+                $claim->user_id,
+                'Klaim Barang Ditolak',
+                "Klaim anda untuk {$claim->item->title} telah ditolak oleh admin.",
+                'claim',
+                "/items/{$claim->item_id}"
+            );
+        }
 
         return response()->json([
             'message' => 'Klaim berhasil DITOLAK. Barang kembali berstatus aktif di publik.',

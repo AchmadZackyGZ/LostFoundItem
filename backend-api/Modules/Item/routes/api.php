@@ -15,18 +15,14 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::get('/dashboard/stats', [ItemController::class, 'getDashboardStats']);
     Route::get('/items/recent', [ItemController::class, 'getRecentItems']);
 
-    // Tambahkan baris ini
     Route::get('/categories', [ItemController::class, 'getCategories']);
 
+    // RUTE REKURSIF KELOLA ITEM
     Route::apiResource('items', ItemController::class)->names('item');
-    Route::post('/', [ItemController::class, 'store']); // buat laporan 
-    Route::get('/', [ItemController::class, 'index']); // ambil semua laporan 
 
-    Route::get('/{id}', [ItemController::class, 'show']); // Lihat detail barang & komentar
-    Route::post('/{id}/discussions', [DiscussionController::class, 'store']); // Kirim komentar
-
-    // Route Klaim
-    Route::post('/{id}/claims', [ClaimController::class, 'store']);
+    // Route Diskusi & Klaim pada Item
+    Route::post('/items/{id}/discussions', [DiscussionController::class, 'store']);
+    Route::post('/items/{id}/claims', [ClaimController::class, 'store']);
 });
 
 
@@ -37,7 +33,6 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 */
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
 
-    // 🔥 RUTE BARU: Validasi Laporan Barang
     Route::get('/items/pending', [ItemController::class, 'getPendingItems']);
 
     // Lihat semua antrean klaim
