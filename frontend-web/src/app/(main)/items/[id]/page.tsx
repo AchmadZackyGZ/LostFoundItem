@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -10,12 +10,15 @@ import {
   CircleDashed,
   Clock,
   Lock,
+  UploadCloud,
+  X,
+  Loader2,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import api from "@/lib/axios";
+import axios from "axios";
 
-// 1. Siapkan TypeScript Interfaces sesuai struktur JSON Backend
 interface Discussion {
   id: number;
   message: string;
@@ -35,7 +38,7 @@ interface ItemDetail {
   location: string;
   date: string;
   image_path: string | null;
-  status: string; // Bisa berisi: 'pending', 'active', 'is_pending', 'completed'
+  status: string;
   reporter: {
     name: string;
     email: string;
@@ -47,30 +50,125 @@ export default function ItemDetail() {
   const params = useParams();
   const id = params.id;
 
-  // 2. Siapkan State untuk Data, Loading, dan Pesan Chat Baru
+  // --- STATE UTAMA ---
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // --- STATE DISKUSI ---
   const [chatMessage, setChatMessage] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
-  // 3. Tarik data dari API ketika halaman dimuat
+  // --- STATE MODAL KLAIM ---
+  const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
+  const [claimDesc, setClaimDesc] = useState("");
+  const [claimImage, setClaimImage] = useState<File | null>(null);
+  const [claimImagePreview, setClaimImagePreview] = useState<string | null>(
+    null,
+  );
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [claimError, setClaimError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- FUNGSI AMBIL DATA ---
+  const fetchItemDetail = async () => {
+    try {
+      const response = await api.get(`/api/v1/items/${id}`);
+      setItem(response.data.data);
+    } catch (error) {
+      console.error("Gagal mengambil detail barang:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchItemDetail = async () => {
-      try {
-        const response = await api.get(`/api/v1/items/${id}`);
-        setItem(response.data.data);
-      } catch (error) {
-        console.error("Gagal mengambil detail barang:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     if (id) {
       fetchItemDetail();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Fungsi format tanggal
+  // --- HANDLER KIRIM PESAN ---
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim()) return;
+    setIsSendingMessage(true);
+    try {
+      await api.post(`/api/v1/items/${id}/discussions`, {
+        message: chatMessage,
+      });
+      setChatMessage("");
+      fetchItemDetail(); // Refresh data untuk memuat pesan baru
+    } catch (error: unknown) {
+      // 🔥 Gunakan validasi axios
+      const errorMessage = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : "Gagal mengirim pesan.";
+      alert(errorMessage);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  // --- HANDLER GAMBAR KLAIM ---
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setClaimError("Ukuran gambar maksimal 5MB");
+        return;
+      }
+      setClaimImage(file);
+      setClaimImagePreview(URL.createObjectURL(file));
+      setClaimError("");
+    }
+  };
+
+  // --- HANDLER SUBMIT KLAIM ---
+  const handleSubmitClaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!claimDesc) {
+      setClaimError("Deskripsi bukti kepemilikan wajib diisi.");
+      return;
+    }
+
+    setIsSubmittingClaim(true);
+    setClaimError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("proof_description", claimDesc);
+      if (claimImage) {
+        formData.append("proof_image", claimImage);
+      }
+
+      await api.post(`/api/v1/items/${id}/claims`, formData, {
+        headers: {
+          "Content-Type": undefined,
+        },
+      });
+
+      alert(
+        "Klaim berhasil diajukan! Barang telah dikunci. Menunggu verifikasi dari Admin.",
+      );
+      setIsClaimModalOpen(false);
+      setClaimDesc("");
+      setClaimImage(null);
+      setClaimImagePreview(null);
+
+      // Refresh UI agar progress bar berubah menjadi is_pending
+      fetchItemDetail();
+    } catch (error: unknown) {
+      // 🔥 Gunakan validasi axios
+      const errorMessage = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : "Terjadi kesalahan saat mengajukan klaim.";
+      setClaimError(errorMessage);
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  };
+
+  // Format tanggal
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {
       year: "numeric",
@@ -113,12 +211,10 @@ export default function ItemDetail() {
   const isClaimPending = item.status === "is_pending";
   const isCompleted = item.status === "completed";
 
-  // Menghitung panjang garis progress (Ada 3 jarak antar 4 node, masing-masing ~33%)
-  let progressWidth = "w-[0%]"; // Default (Pending: cuma node 1 yg nyala)
-  if (isActive || isClaimPending) progressWidth = "w-[66%]"; // Sampai node ke-3
-  if (isCompleted) progressWidth = "w-[100%]"; // Full sampai ujung
+  let progressWidth = "w-[0%]";
+  if (isActive || isClaimPending) progressWidth = "w-[66%]";
+  if (isCompleted) progressWidth = "w-[100%]";
 
-  // Konfigurasi Tombol Klaim berdasarkan Status
   let btnConfig = {
     disabled: false,
     text: "Ini Barang Saya (Klaim)",
@@ -152,12 +248,11 @@ export default function ItemDetail() {
     };
   }
 
-  // Jika barang sedang di-klaim/selesai, kita buat efek abu-abu pada gambar
   const imageFilter =
     isClaimPending || isCompleted ? "grayscale contrast-75 opacity-80" : "";
 
   return (
-    <div className="container mx-auto px-4 lg:px-8 py-8">
+    <div className="container mx-auto px-4 lg:px-8 py-8 relative">
       <Link
         href="/items"
         className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-6 transition-colors"
@@ -166,7 +261,7 @@ export default function ItemDetail() {
       </Link>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* ================= KOLOM KIRI (Gambar & Detail) ================= */}
+        {/* ================= KOLOM KIRI ================= */}
         <div className="w-full lg:w-3/5 space-y-6">
           <div className="bg-surface dark:bg-surface-dark rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-sm">
             <div className="relative h-80 md:h-[400px] w-full bg-gray-100 dark:bg-gray-900">
@@ -251,7 +346,7 @@ export default function ItemDetail() {
           </div>
         </div>
 
-        {/* ================= KOLOM KANAN (Timeline & Diskusi) ================= */}
+        {/* ================= KOLOM KANAN ================= */}
         <div className="w-full lg:w-2/5 space-y-6">
           <div className="bg-surface dark:bg-surface-dark rounded-2xl p-6 border border-gray-200 dark:border-gray-800 shadow-sm">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
@@ -261,16 +356,12 @@ export default function ItemDetail() {
               <Clock size={14} /> Dilaporkan pada {formatDate(item.date)}
             </p>
 
-            {/* TIMELINE UI SESUAI PRD */}
             <div className="flex items-start justify-between mb-10 relative mt-2">
               <div className="absolute top-[14px] left-4 right-4 h-[2px] bg-gray-200 dark:bg-gray-700/80 z-0"></div>
-
-              {/* Progress Line Dinamis */}
               <div
                 className={`absolute top-[14px] left-4 h-[2px] bg-primary dark:bg-blue-500 z-0 transition-all duration-700 ease-in-out ${progressWidth}`}
               ></div>
 
-              {/* Node 1: Reported (Selalu Nyala) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div className="w-7 h-7 rounded-full bg-primary dark:bg-blue-500 text-white flex items-center justify-center shadow-md">
                   <CheckCircle2 size={16} strokeWidth={3} />
@@ -280,14 +371,9 @@ export default function ItemDetail() {
                 </span>
               </div>
 
-              {/* Node 2: Verified (Nyala jika BUKAN pending) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                    !isPending
-                      ? "bg-primary dark:bg-blue-500 text-white shadow-md"
-                      : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
-                  }`}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${!isPending ? "bg-primary dark:bg-blue-500 text-white shadow-md" : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"}`}
                 >
                   {!isPending && <CheckCircle2 size={16} strokeWidth={3} />}
                 </div>
@@ -298,16 +384,9 @@ export default function ItemDetail() {
                 </span>
               </div>
 
-              {/* Node 3: Searching/Found (Nyala jika BUKAN pending) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                    isCompleted
-                      ? "bg-primary dark:bg-blue-500 text-white shadow-md"
-                      : !isPending
-                        ? "bg-surface dark:bg-surface-dark border-[3px] border-primary dark:border-blue-500"
-                        : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
-                  }`}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${isCompleted ? "bg-primary dark:bg-blue-500 text-white shadow-md" : !isPending ? "bg-surface dark:bg-surface-dark border-[3px] border-primary dark:border-blue-500" : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"}`}
                 >
                   {isCompleted ? (
                     <CheckCircle2 size={16} strokeWidth={3} />
@@ -326,14 +405,9 @@ export default function ItemDetail() {
                 </span>
               </div>
 
-              {/* Node 4: Claimed (Hanya nyala saat completed) */}
               <div className="flex flex-col items-center gap-2 relative z-10">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                    isCompleted
-                      ? "bg-primary dark:bg-blue-500 text-white shadow-md"
-                      : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"
-                  }`}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${isCompleted ? "bg-primary dark:bg-blue-500 text-white shadow-md" : "bg-surface dark:bg-surface-dark border-[3px] border-gray-200 dark:border-gray-700"}`}
                 >
                   {isCompleted && <CheckCircle2 size={16} strokeWidth={3} />}
                 </div>
@@ -345,9 +419,9 @@ export default function ItemDetail() {
               </div>
             </div>
 
-            {/* Tombol Klaim Dinamis */}
             <button
               disabled={btnConfig.disabled}
+              onClick={() => setIsClaimModalOpen(true)}
               className={`w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors ${btnConfig.style}`}
             >
               {btnConfig.icon}
@@ -381,11 +455,7 @@ export default function ItemDetail() {
                   return (
                     <div key={msg.id} className="flex gap-3">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white shadow-sm ${
-                          isPelapor
-                            ? "bg-primary"
-                            : "bg-gray-400 dark:bg-gray-700"
-                        }`}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white shadow-sm ${isPelapor ? "bg-primary" : "bg-gray-400 dark:bg-gray-700"}`}
                       >
                         {msg.user.name.charAt(0).toUpperCase()}
                       </div>
@@ -402,11 +472,7 @@ export default function ItemDetail() {
                           </span>
                         </div>
                         <div
-                          className={`p-3 rounded-2xl rounded-tl-none text-sm text-gray-700 dark:text-gray-300 ${
-                            isPelapor
-                              ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800"
-                              : "bg-gray-100 dark:bg-gray-800 border border-transparent"
-                          }`}
+                          className={`p-3 rounded-2xl rounded-tl-none text-sm text-gray-700 dark:text-gray-300 ${isPelapor ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800" : "bg-gray-100 dark:bg-gray-800 border border-transparent"}`}
                         >
                           {msg.message}
                         </div>
@@ -423,27 +489,141 @@ export default function ItemDetail() {
                   type="text"
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !isSendingMessage && !isCompleted)
+                      handleSendMessage();
+                  }}
                   placeholder={
                     isCompleted ? "Diskusi telah ditutup." : "Tulis pesan..."
                   }
-                  disabled={isCompleted}
+                  disabled={isCompleted || isSendingMessage}
                   className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-primary dark:focus:border-blue-500 text-gray-900 dark:text-white transition-colors disabled:opacity-50"
                 />
                 <button
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-blue-700 p-2 transition-colors disabled:opacity-50"
-                  disabled={!chatMessage.trim() || isCompleted}
-                  onClick={() => {
-                    console.log("Kirim pesan:", chatMessage);
-                    setChatMessage("");
-                  }}
+                  disabled={
+                    !chatMessage.trim() || isCompleted || isSendingMessage
+                  }
+                  onClick={handleSendMessage}
                 >
-                  <Send size={18} />
+                  {isSendingMessage ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ================= MODAL FORM KLAIM ================= */}
+      {isClaimModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#151c2c] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Formulir Klaim Barang
+              </h2>
+              <button
+                onClick={() => setIsClaimModalOpen(false)}
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitClaim} className="p-6 space-y-5">
+              {claimError && (
+                <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm">
+                  {claimError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Ceritakan Bukti Kepemilikan Anda{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={claimDesc}
+                  onChange={(e) => setClaimDesc(e.target.value)}
+                  rows={4}
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 resize-none"
+                  placeholder="Misal: Saya punya goresan khusus di bagian belakang, atau ada stiker x..."
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Unggah Bukti Foto (Opsional tapi disarankan)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+
+                {!claimImagePreview ? (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center p-6 border-2 border-gray-300 dark:border-gray-700 border-dashed rounded-xl bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    <UploadCloud className="h-8 w-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Klik untuk unggah foto (Maks. 5MB)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative border border-gray-300 dark:border-gray-700 rounded-xl p-2 bg-gray-50 dark:bg-gray-900 flex items-center gap-4">
+                    <img
+                      src={claimImagePreview}
+                      alt="Preview"
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                    <p className="text-sm text-gray-700 dark:text-gray-300 truncate flex-grow">
+                      {claimImage?.name}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClaimImage(null);
+                        setClaimImagePreview(null);
+                      }}
+                      className="p-2 text-red-500 hover:bg-red-100 rounded-lg"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsClaimModalOpen(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingClaim}
+                  className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-primary hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  {isSubmittingClaim ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : null}
+                  {isSubmittingClaim ? "Mengirim..." : "Kirim Klaim"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
