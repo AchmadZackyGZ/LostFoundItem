@@ -134,6 +134,48 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logout berhasil.']);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'department' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|nullable|string|max:30',
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui.',
+            'user' => $user
+        ], 200);
+    }
+
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Password saat ini tidak sesuai.'
+            ], 400);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json([
+            'message' => 'Password berhasil diperbarui.'
+        ], 200);
+    }
+
     // kode kode dibawah hasil generate dari php laravel nya jadi jika kita frontend nya menggunakan .blade maka 
     // logic logic yang diatas itu diganti dibawah tapi kita menggunakan FE selain .blade jadi ini hanya deadcode saja 
     // /**
