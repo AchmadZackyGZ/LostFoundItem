@@ -164,6 +164,7 @@ export default function ReportsPage() {
                         }
                         alt={report.title}
                         fill
+                        sizes="64px"
                         className="w-full h-full object-cover"
                       />
                     </div>

@@ -19,5 +19,7 @@ Route::prefix('auth')->group(function () {
         Route::get('/me', function (\Illuminate\Http\Request $request) {
             return response()->json($request->user());
         });
+        Route::put('/profile', [AuthController::class, 'updateProfile']);
+        Route::put('/password', [AuthController::class, 'updatePassword']);
     });
 });

@@ -8,9 +8,16 @@ use Illuminate\Http\Request;
 use Modules\Item\Http\Requests\StoreClaimRequest;
 use Modules\Item\Models\Claim;
 use Modules\Item\Models\Item;
+use Modules\Notification\Contracts\NotificationServiceInterface;
 
 class ClaimController extends Controller
 {
+    private NotificationServiceInterface $notificationService;
+
+    public function __construct(NotificationServiceInterface $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
     /**
      * Store a newly created resource in storage.
      */
@@ -60,6 +67,15 @@ class ClaimController extends Controller
         $item->update([
             'status' => 'is_pending'
         ]);
+
+        // 3. Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $request->user()->id,
+            'Pengajuan Klaim Terkirim',
+            "Klaim anda untuk {$item->title} telah diajukan dan menunggu verifikasi admin.",
+            'claim',
+            "/items/{$item->id}"
+        );
 
         return response()->json([
             'message' => 'Klaim berhasil diajukan. Silakan tunggu verifikasi bukti kepemilikan oleh Admin',
