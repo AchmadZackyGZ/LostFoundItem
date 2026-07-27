@@ -32,6 +32,8 @@ import Link from "next/link";
 import api from "@/lib/axios";
 import axios from "axios";
 import clsx from "clsx";
+import { useAuthStore } from "@/store/useAuthStore";
+import Pusher from "pusher-js";
 
 interface Discussion {
   id: number;
@@ -107,10 +109,46 @@ export default function ItemDetailPage() {
     }
   };
 
+  // --- PURE REAL-TIME WEBSOCKET LISTENER (PUSHER CHANNELS AP1) ---
   useEffect(() => {
-    if (id) {
-      fetchItemDetail();
-    }
+    if (!id) return;
+
+    // 1. Fetch data barang awal 1x saja
+    fetchItemDetail();
+
+    // 2. Hubungkan ke Pusher WebSocket Channel Resmi User (Key: b829baf1ed757a809bf3, Cluster: ap1)
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_APP_KEY || "b829baf1ed757a809bf3";
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_APP_CLUSTER || "ap1";
+
+    const pusher = new Pusher(pusherKey, {
+      cluster: pusherCluster,
+    });
+
+    const channelName = `item-discussion-${id}`;
+    const channel = pusher.subscribe(channelName);
+
+    // 3. Instant WebSocket Event Listener (0ms Push dari Server saat Ada Chat Baru)
+    channel.bind("new-discussion", (newMsg: Discussion) => {
+      setItem((prev) => {
+        if (!prev) return prev;
+        const exists = prev.discussions.some(
+          (d) =>
+            d.id === newMsg.id ||
+            (d.message === newMsg.message && d.user.name === newMsg.user.name),
+        );
+        if (exists) return prev;
+        return {
+          ...prev,
+          discussions: [...prev.discussions, newMsg],
+        };
+      });
+    });
+
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe(channelName);
+      pusher.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -143,23 +181,66 @@ export default function ItemDetailPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // --- HANDLER KIRIM PESAN ---
+  // --- HANDLER KIRIM PESAN OPTIMISTIS (INSTANT 0MS RESPONSE TANPA LOADING) ---
   const handleSendMessage = async () => {
-    if (!chatMessage.trim()) return;
-    setIsSendingMessage(true);
+    const text = chatMessage.trim();
+    if (!text || !item || isCompleted) return;
+
+    // 1. Ambil data user yang sedang login dari useAuthStore
+    const currentUser = useAuthStore.getState().user;
+
+    // 2. Buat pesan sementara (Optimistic Message)
+    const tempId = Date.now();
+    const optimisticMsg: Discussion = {
+      id: tempId,
+      message: text,
+      created_at: new Date().toISOString(),
+      user: {
+        id: currentUser?.id ? Number(currentUser.id) || tempId : tempId,
+        name: currentUser?.name || "Anda",
+        avatar_url: currentUser?.avatar_url,
+      },
+    };
+
+    // 3. SEGERA TAMPILKAN PESAN DI CHAT BUBBLE & KOSONGKAN INPUT (0ms INSTANT!)
+    setChatMessage("");
+    setItem((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        discussions: [...prev.discussions, optimisticMsg],
+      };
+    });
+
+    // 4. Kirim ke API secara asynchronous di background tanpa memblokir UI
     try {
-      await api.post(`/api/v1/items/${id}/discussions`, {
-        message: chatMessage,
+      const res = await api.post(`/api/v1/items/${id}/discussions`, {
+        message: text,
       });
-      setChatMessage("");
-      fetchItemDetail();
+
+      if (res.data?.data) {
+        const realMsg: Discussion = res.data.data;
+        setItem((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            discussions: prev.discussions.map((m) =>
+              m.id === tempId ? realMsg : m,
+            ),
+          };
+        });
+      }
     } catch (error: unknown) {
-      const errorMessage = axios.isAxiosError(error)
-        ? error.response?.data?.message
-        : "Gagal mengirim pesan.";
-      alert(errorMessage);
-    } finally {
-      setIsSendingMessage(false);
+      console.error("Gagal mengirim pesan di background:", error);
+      // Revert optimistic update jika gagal
+      setItem((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          discussions: prev.discussions.filter((m) => m.id !== tempId),
+        };
+      });
+      alert("Gagal mengirim pesan. Silakan periksa koneksi internet Anda.");
     }
   };
 
@@ -220,6 +301,18 @@ export default function ItemDetailPage() {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "-";
+    if (dateString.length <= 10 && dateString.includes("-")) {
+      const parts = dateString.split("-");
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        const months = [
+          "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+          "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+        return `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1]} ${year}`;
+      }
+    }
     const options: Intl.DateTimeFormatOptions = {
       year: "numeric",
       month: "long",
@@ -652,27 +745,22 @@ export default function ItemDetailPage() {
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !isSendingMessage && !isCompleted)
-                      handleSendMessage();
+                    if (e.key === "Enter" && !isCompleted) handleSendMessage();
                   }}
                   placeholder={
-                    isCompleted ? "Diskusi telah ditutup." : "Tulis pertanyaan atau komentar..."
+                    isCompleted
+                      ? "Diskusi telah ditutup."
+                      : "Tulis pertanyaan atau komentar..."
                   }
-                  disabled={isCompleted || isSendingMessage}
+                  disabled={isCompleted}
                   className="w-full bg-gray-50 dark:bg-[#0b1120] border border-gray-200 dark:border-gray-700 rounded-lg pl-4 pr-12 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 text-gray-900 dark:text-white transition-colors disabled:opacity-50"
                 />
                 <button
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-blue-700 p-2 transition-colors disabled:opacity-50"
-                  disabled={
-                    !chatMessage.trim() || isCompleted || isSendingMessage
-                  }
+                  disabled={!chatMessage.trim() || isCompleted}
                   onClick={handleSendMessage}
                 >
-                  {isSendingMessage ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Send size={16} />
-                  )}
+                  <Send size={16} />
                 </button>
               </div>
             </div>

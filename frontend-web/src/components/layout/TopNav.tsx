@@ -45,12 +45,15 @@ export default function TopNav() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
 
-  // Notifications State
+  // Notifications State & Global Floating Toast Alert
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [toastNotif, setToastNotif] = useState<AppNotification | null>(null);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const helpRef = useRef<HTMLDivElement>(null);
+  const knownNotifIdsRef = useRef<Set<string>>(new Set());
+  const isInitialFetchRef = useRef<boolean>(true);
 
   const navLinks = [
     { name: "Dasbor", href: "/" },
@@ -59,21 +62,47 @@ export default function TopNav() {
     { name: "Laporan", href: "/reports" },
   ];
 
-  // --- AMBIL DATA NOTIFIKASI DINAMIS ---
+  // --- AMBIL DATA NOTIFIKASI DINAMIS & PROSES FLOATING TOAST ALERT ---
   const fetchNotifications = async () => {
     try {
       const res = await api.get("/api/v1/notifications");
-      const notifList: AppNotification[] = res.data.data || [];
+      const rawList: AppNotification[] = res.data.data || [];
+
+      // 🚫 EXCLUDE NOTIFIKASI DISKUSI/CHAT: Filter notifikasi bertipe 'discussion' agar tidak penuhi lonceng & toast
+      const notifList = rawList.filter(
+        (n) => n.type !== "discussion" && !n.title.toLowerCase().includes("diskusi"),
+      );
+
       setNotifications(notifList);
-      setUnreadCount(notifList.filter((n) => !n.is_read).length);
+
+      const unreadList = notifList.filter((n) => !n.is_read);
+      setUnreadCount(unreadList.length);
+
+      if (isInitialFetchRef.current) {
+        notifList.forEach((n) => knownNotifIdsRef.current.add(n.id));
+        isInitialFetchRef.current = false;
+      } else {
+        // Polling lanjutan: cari notifikasi baru (bukan diskusi) yang belum pernah muncul
+        const newUnread = unreadList.find(
+          (n) => !knownNotifIdsRef.current.has(n.id),
+        );
+        if (newUnread) {
+          knownNotifIdsRef.current.add(newUnread.id);
+          setToastNotif(newUnread);
+          setTimeout(() => setToastNotif(null), 8000);
+        }
+      }
     } catch {
-      // Fallback jika API bermasalah
       setNotifications([]);
     }
   };
 
   useEffect(() => {
     fetchNotifications();
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Close Popovers on Click Outside
@@ -196,12 +225,19 @@ export default function TopNav() {
         </div>
 
         <div className="flex items-center gap-4">
-          <Link
-            href="/report"
+          <button
+            onClick={() => {
+              if (user?.role === "admin") {
+                alert("admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang");
+                router.push("/admin");
+              } else {
+                router.push("/report");
+              }
+            }}
             className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition hidden sm:block shadow-md shadow-blue-900/20"
           >
             + Lapor Barang
-          </Link>
+          </button>
 
           {/* ================================================================= */}
           {/* 🔔 INTERACTIVE NOTIFICATION POPDOWN DROPDOWN (TOMBOL LONCENG) */}
@@ -475,6 +511,18 @@ export default function TopNav() {
 
                 {/* List Menu Links */}
                 <div className="flex flex-col py-2">
+                  {user?.role === "admin" && (
+                    <>
+                      <Link
+                        href="/admin"
+                        className="flex items-center gap-3 px-5 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors border-l-4 border-blue-600 dark:border-blue-400"
+                      >
+                        <Shield size={16} /> Admin Command Center
+                      </Link>
+                      <div className="h-px bg-gray-100 dark:bg-gray-800 w-full my-1"></div>
+                    </>
+                  )}
+
                   <Link
                     href="/profile"
                     className="flex items-center gap-3 px-5 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-primary dark:hover:text-blue-400 transition-colors"
@@ -507,6 +555,44 @@ export default function TopNav() {
           </div>
         </div>
       </div>
+
+      {/* ================================================================= */}
+      {/* 🔔 GLOBAL FLOATING TOAST ALERT BANNER (MENGAMBANG POJOK KANAN ATAS) */}
+      {/* ================================================================= */}
+      {toastNotif && (
+        <div className="fixed top-20 right-5 z-[9999] max-w-md w-full bg-[#0d1527] text-white border-2 border-emerald-500 rounded-2xl p-4 shadow-[0_10px_40px_rgba(16,185,129,0.35)] animate-in fade-in slide-in-from-top-5 duration-300 flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center flex-shrink-0 font-bold">
+            <Bell size={20} className="animate-bounce" />
+          </div>
+
+          <div
+            className="flex-1 min-w-0 cursor-pointer"
+            onClick={() => handleNotifClick(toastNotif)}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-bold text-sm text-emerald-400 flex items-center gap-1.5 truncate">
+                <Sparkles size={14} /> {toastNotif.title}
+              </h4>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold flex-shrink-0">
+                BARU
+              </span>
+            </div>
+            <p className="text-xs text-gray-200 mt-1 line-clamp-2 leading-relaxed">
+              {toastNotif.body}
+            </p>
+            <p className="text-[10px] text-blue-400 font-bold mt-1.5 flex items-center gap-1 hover:underline">
+              Klik untuk membuka laporan <ExternalLink size={10} />
+            </p>
+          </div>
+
+          <button
+            onClick={() => setToastNotif(null)}
+            className="text-gray-400 hover:text-white p-1 rounded-lg transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
     </header>
   );
 }

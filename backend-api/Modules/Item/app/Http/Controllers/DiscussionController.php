@@ -37,20 +37,50 @@ class DiscussionController extends Controller
             'message' => $request->message,
         ]);
 
-        // Kirim Notifikasi ke pembuat laporan jika bukan dirinya sendiri
-        if ($item->user_id !== $userId) {
-            $this->notificationService->send(
-                $item->user_id,
-                'Balasan Diskusi Baru',
-                "Seseorang membalas komentar anda pada item {$item->title}.",
-                'discussion',
-                "/items/{$item->id}"
-            );
+        // 🚫 SEPERTI USER REQUEST: Notifikasi diskusi/komentar tidak dikirimkan agar lonceng & toast tidak penuh
+        // if ($item->user_id !== $userId) {
+        //     $this->notificationService->send(
+        //         $item->user_id,
+        //         'Balasan Diskusi Baru',
+        //         "Seseorang membalas komentar anda pada item {$item->title}.",
+        //         'discussion',
+        //         "/items/{$item->id}"
+        //     );
+        // }
+
+        $user = $request->user();
+
+        $discussionData = [
+            'id' => $discussion->id,
+            'item_id' => $item->id,
+            'message' => $discussion->message,
+            'created_at' => $discussion->created_at,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'avatar_url' => $user->avatar_url ?? null,
+            ]
+        ];
+
+        // 📡 WEBSOCKET REALTIME BROADCASTING (PUSHER CHANNELS AP1)
+        $pusherKey = env('PUSHER_APP_KEY', 'b829baf1ed757a809bf3');
+        $pusherSecret = env('PUSHER_APP_SECRET', '62959d7a0d92acbd7334');
+        $pusherId = env('PUSHER_APP_ID', '2180462');
+        $pusherCluster = env('PUSHER_APP_CLUSTER', 'ap1');
+
+        if ($pusherKey && $pusherSecret && $pusherId) {
+            try {
+                $options = ['cluster' => $pusherCluster, 'useTLS' => true];
+                $pusher = new \Pusher\Pusher($pusherKey, $pusherSecret, $pusherId, $options);
+                $pusher->trigger("item-discussion-{$item->id}", 'new-discussion', $discussionData);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Pusher trigger error: ' . $e->getMessage());
+            }
         }
 
         return response()->json([
             'message' => 'Komentar berhasil ditambahkan.',
-            'data' => $discussion
+            'data' => $discussionData
         ], 201);
     }
 }
