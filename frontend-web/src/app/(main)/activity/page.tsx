@@ -28,7 +28,9 @@ export default function ActivityPage() {
   const [activeFilter, setActiveFilter] = useState<
     "all" | "report" | "claim" | "discussion"
   >("all");
-  const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
+  const [notifications, setNotifications] = useState<ActivityNotification[]>(
+    [],
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   // Ambil Notifikasi dari Backend API
@@ -62,7 +64,9 @@ export default function ActivityPage() {
     try {
       await api.put(`/api/v1/notifications/${id}/read`);
       setNotifications((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, is_read: true } : item)),
+        prev.map((item) =>
+          item.id === id ? { ...item, is_read: true } : item,
+        ),
       );
     } catch (err) {
       console.error("Gagal menandai notifikasi:", err);
@@ -171,7 +175,11 @@ export default function ActivityPage() {
 
   // Format Tanggal / Waktu
   const formatTimestamp = (dateStr: string) => {
-    if (dateStr.includes("Hari ini") || dateStr.includes("Kemarin") || dateStr.includes("Mei")) {
+    if (
+      dateStr.includes("Hari ini") ||
+      dateStr.includes("Kemarin") ||
+      dateStr.includes("Mei")
+    ) {
       return dateStr;
     }
     try {
@@ -265,7 +273,8 @@ export default function ActivityPage() {
             Belum Ada Aktivitas
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Aktivitas laporan, klaim, atau balasan diskusi Anda akan muncul di sini.
+            Aktivitas laporan, klaim, atau balasan diskusi Anda akan muncul di
+            sini.
           </p>
         </div>
       ) : (

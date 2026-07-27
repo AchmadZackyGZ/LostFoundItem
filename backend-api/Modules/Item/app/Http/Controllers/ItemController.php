@@ -25,6 +25,28 @@ class ItemController extends Controller
         $this->notificationService = $notificationService;
     }
 
+    private function parseImageUrls(?string $imagePath): array
+    {
+        if (empty($imagePath)) {
+            return [];
+        }
+
+        if (str_starts_with(trim($imagePath), '[')) {
+            $decoded = json_decode($imagePath, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [$imagePath];
+    }
+
+    private function getPrimaryImageUrl(?string $imagePath): ?string
+    {
+        $urls = $this->parseImageUrls($imagePath);
+        return $urls[0] ?? null;
+    }
+
     // get all seluruh daftar laporan barang
     public function index(Request $request): JsonResponse
     {
@@ -76,7 +98,8 @@ class ItemController extends Controller
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'status' => $item->status,
                 'is_urgent' => $item->is_urgent,
                 'created_at' => $item->created_at,
@@ -137,7 +160,8 @@ class ItemController extends Controller
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'status' => $item->status,
                 'reporter' => [
                     'name' => $reporter['name'] ?? 'Anonim',
@@ -199,7 +223,7 @@ class ItemController extends Controller
                 'description' => $item->description,
                 'status' => 'Hilang', // Karena di tabel Anda status defaultnya 'active' 
                 'isUrgent' => (bool) $item->is_urgent,
-                'imageUrl' => $item->image_path ?? 'https://via.placeholder.com/400' // Gambar fallback
+                'imageUrl' => $this->getPrimaryImageUrl($item->image_path) ?? 'https://via.placeholder.com/400' // Gambar fallback
             ];
         });
 
@@ -223,7 +247,8 @@ class ItemController extends Controller
                 'id' => $item->id,
                 'type' => $item->type,
                 'title' => $item->title,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'category' => $item->category->name ?? 'Tanpa Kategori',
                 'status' => $item->status,
                 'date' => $item->date,
@@ -345,18 +370,32 @@ class ItemController extends Controller
      */
     public function store(StoreItemRequest $request): JsonResponse
     {
-        $imageUrl = null;
+        $uploadedUrls = [];
 
-        if ($request->hasFile('image')) {
-            $uploadedFileUrl = cloudinary()->upload(
+        // Upload multiple images if 'images' array is sent
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                $uploadedUrls[] = cloudinary()->upload(
+                    $file->getRealPath(),
+                    [
+                        'folder' => 'lost_found_uisi'
+                    ]
+                )->getSecurePath();
+            }
+        } elseif ($request->hasFile('image')) {
+            // Fallback jika dikirim via field single 'image'
+            $uploadedUrls[] = cloudinary()->upload(
                 $request->file('image')->getRealPath(),
                 [
                     'folder' => 'lost_found_uisi'
                 ]
             )->getSecurePath();
-
-            $imageUrl = $uploadedFileUrl;
         }
+
+        // Jika lebih dari 1 gambar, simpan sebagai JSON String. Jika 1 gambar, simpan URL langsung.
+        $imageUrl = count($uploadedUrls) > 1
+            ? json_encode($uploadedUrls)
+            : ($uploadedUrls[0] ?? null);
 
         // 2. Simpan Data ke Database
         $item = Item::create([
