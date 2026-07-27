@@ -146,6 +146,7 @@ class ItemController extends Controller
                 'user' => [
                     'id' => $commenter['id'] ?? null,
                     'name' => $commenter['name'] ?? 'Anonim',
+                    'avatar_url' => $commenter['avatar_url'] ?? null,
                 ]
             ];
         });
@@ -165,7 +166,8 @@ class ItemController extends Controller
                 'status' => $item->status,
                 'reporter' => [
                     'name' => $reporter['name'] ?? 'Anonim',
-                    'email' => $reporter['email'] ?? '-'
+                    'email' => $reporter['email'] ?? '-',
+                    'avatar_url' => $reporter['avatar_url'] ?? null,
                 ],
                 'discussions' => $discussions // Masukkan array komentar yang sudah di-mapping
             ]

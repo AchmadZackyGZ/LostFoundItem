@@ -9,6 +9,7 @@ interface User {
   nim?: string;
   role?: string;
   department?: string;
+  avatar_url?: string;
 }
 
 interface AuthState {
