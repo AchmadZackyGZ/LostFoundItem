@@ -58,6 +58,10 @@ class DiscussionController extends Controller
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'email' => $user->email ?? '-',
+                'department' => $user->department ?? 'Informatika',
+                'role' => $user->role ?? 'Mahasiswa',
+                'nim' => $user->nim ?? '-',
                 'avatar_url' => $user->avatar_url ?? null,
             ]
         ];

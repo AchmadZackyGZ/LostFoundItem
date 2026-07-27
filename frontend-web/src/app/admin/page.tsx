@@ -41,6 +41,7 @@ import {
   Activity,
   Cpu,
   Wifi,
+  Menu,
 } from "lucide-react";
 import clsx from "clsx";
 import api from "@/lib/axios";
@@ -118,6 +119,7 @@ export default function AdminDashboardPage() {
   const [activeNav, setActiveNav] = useState<
     "Overview" | "Claim Queue" | "Inventory" | "User Management" | "Settings"
   >("Overview");
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Stats Counters State
@@ -590,11 +592,130 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070c18] text-gray-100 flex font-sans antialiased">
+    <div className="min-h-screen bg-[#070c18] text-gray-100 flex flex-col md:flex-row font-sans antialiased">
       {/* ================================================================= */}
-      {/* 🛡️ SIDEBAR LEFT NAVIGATION */}
+      {/* 📱 MOBILE ADMIN HEADER BAR (LAYAR KECIL / HP) */}
       {/* ================================================================= */}
-      <aside className="w-64 bg-[#0d1424] border-r border-gray-800/80 flex flex-col justify-between p-5 flex-shrink-0">
+      <header className="md:hidden bg-[#0d1424] border-b border-gray-800 p-4 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
+            <Shield size={16} />
+          </div>
+          <div>
+            <h1 className="font-bold text-white text-sm">Command Center</h1>
+            <p className="text-[10px] text-gray-400 font-medium">Enterprise Admin</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          className="p-2 bg-gray-800/80 text-gray-300 rounded-lg border border-gray-700 hover:text-white"
+          aria-label="Toggle Menu Admin Mobile"
+        >
+          {isMobileSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </header>
+
+      {/* ================================================================= */}
+      {/* 📱 MOBILE SIDEBAR OVERLAY & DRAWER */}
+      {/* ================================================================= */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden bg-black/80 backdrop-blur-sm flex">
+          <aside className="w-72 bg-[#0d1424] h-full flex flex-col justify-between p-5 border-r border-gray-800 animate-in slide-in-from-left duration-200">
+            <div>
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
+                    <Shield size={18} />
+                  </div>
+                  <div>
+                    <h1 className="font-bold text-white text-sm">Command Center</h1>
+                    <p className="text-[10px] text-gray-400">Enterprise Admin</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="space-y-1.5">
+                {[
+                  { name: "Overview", icon: LayoutDashboard },
+                  { name: "Claim Queue", icon: ClipboardList },
+                  { name: "Inventory", icon: Package },
+                  { name: "User Management", icon: Users },
+                  { name: "Settings", icon: Settings },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeNav === item.name;
+
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={() => {
+                        setActiveNav(item.name as any);
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={clsx(
+                        "w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all text-left",
+                        isActive
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                          : "text-gray-400 hover:bg-gray-800/50 hover:text-white",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon size={18} />
+                        <span>{item.name}</span>
+                      </div>
+                      {item.name === "Claim Queue" && stats.pendingClaims > 0 && (
+                        <span className="bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {stats.pendingClaims}
+                        </span>
+                      )}
+                      {item.name === "Inventory" && stats.pendingItems > 0 && (
+                        <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {stats.pendingItems}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            <div className="space-y-2 pt-6 border-t border-gray-800/60">
+              <button
+                onClick={() => {
+                  setIsMobileSidebarOpen(false);
+                  setIsSystemStatusOpen(true);
+                }}
+                className="w-full bg-[#131c31] hover:bg-[#1a2642] text-gray-300 border border-gray-700/50 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition"
+              >
+                <Server size={14} /> System Status
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="w-full text-red-400 hover:bg-red-500/10 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition text-left"
+              >
+                <LogOut size={14} /> Logout
+              </button>
+            </div>
+          </aside>
+          <div
+            className="flex-1"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          ></div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* 🛡️ SIDEBAR LEFT NAVIGATION DESKTOP */}
+      {/* ================================================================= */}
+      <aside className="hidden md:flex w-64 bg-[#0d1424] border-r border-gray-800/80 flex-col justify-between p-5 flex-shrink-0 min-h-screen">
         <div>
           {/* Logo & Header */}
           <div className="flex items-center gap-3 px-2 py-3 mb-8">
@@ -675,7 +796,7 @@ export default function AdminDashboardPage() {
       {/* ================================================================= */}
       {/* 📊 MAIN CONTENT AREA */}
       {/* ================================================================= */}
-      <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full max-w-7xl min-w-0">
         {/* Top Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -695,7 +816,7 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/"
               className="bg-[#131c31] hover:bg-[#1a2642] border border-blue-500/40 text-blue-400 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-sm"
