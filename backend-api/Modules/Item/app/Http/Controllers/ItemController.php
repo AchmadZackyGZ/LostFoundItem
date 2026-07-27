@@ -155,6 +155,10 @@ class ItemController extends Controller
                 'user' => [
                     'id' => $commenter['id'] ?? null,
                     'name' => $commenter['name'] ?? 'Anonim',
+                    'email' => $commenter['email'] ?? '-',
+                    'department' => $commenter['department'] ?? 'Informatika',
+                    'role' => $commenter['role'] ?? 'Mahasiswa',
+                    'nim' => $commenter['nim'] ?? '-',
                     'avatar_url' => $commenter['avatar_url'] ?? null,
                 ]
             ];

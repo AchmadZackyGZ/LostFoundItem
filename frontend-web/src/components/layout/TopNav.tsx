@@ -20,6 +20,8 @@ import {
   Info,
   X,
   Sparkles,
+  Menu,
+  ChevronRight,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -41,6 +43,7 @@ export default function TopNav() {
   const { user, logout } = useAuthStore();
 
   // --- STATE INTERAKTIF ---
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
@@ -224,7 +227,16 @@ export default function TopNav() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* TOMBOL HAMBURGER MENU MOBILE */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="md:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-white rounded-lg transition border border-gray-200 dark:border-gray-800"
+            aria-label="Toggle Mobile Menu"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+
           <button
             onClick={() => {
               if (user?.role === "admin") {
@@ -328,7 +340,7 @@ export default function TopNav() {
                             <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
                               {notif.title}
                             </h4>
-                            <span className="text-[10px] text-gray-400 flex-shrink-0">
+                            <span className="text-[10px] text-gray-400 flex-shrink-0" suppressHydrationWarning>
                               {new Date(notif.created_at).toLocaleTimeString(
                                 "id-ID",
                                 { hour: "2-digit", minute: "2-digit" },
@@ -555,6 +567,59 @@ export default function TopNav() {
           </div>
         </div>
       </div>
+
+      {/* ================================================================= */}
+      {/* 📱 MOBILE HAMBURGER MENU DROPDOWN & DRAWER */}
+      {/* ================================================================= */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden bg-[#0c1322] border-b border-gray-800 animate-in slide-in-from-top-2 duration-200 shadow-2xl">
+          <div className="container mx-auto px-4 py-4 space-y-3">
+            {/* List Navigasi Utama */}
+            <div className="flex flex-col gap-1">
+              {navLinks.map((link) => {
+                const isActive =
+                  pathname === link.href ||
+                  (link.href !== "/" && pathname.startsWith(link.href));
+
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={clsx(
+                      "px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-between",
+                      isActive
+                        ? "bg-primary text-white shadow-md"
+                        : "text-gray-300 hover:bg-gray-800/80 hover:text-white",
+                    )}
+                  >
+                    <span>{link.name}</span>
+                    {isActive && <ChevronRight size={16} />}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Mobile + Lapor Barang Action Button */}
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                if (user?.role === "admin") {
+                  alert(
+                    "admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang",
+                  );
+                  router.push("/admin");
+                } else {
+                  router.push("/report");
+                }
+              }}
+              className="w-full bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-blue-800 transition shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
+            >
+              + Lapor Barang Baru
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ================================================================= */}
       {/* 🔔 GLOBAL FLOATING TOAST ALERT BANNER (MENGAMBANG POJOK KANAN ATAS) */}

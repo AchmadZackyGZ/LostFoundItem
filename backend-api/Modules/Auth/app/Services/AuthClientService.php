@@ -21,7 +21,9 @@ class AuthClientService implements AuthClientInterface
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'role' => $user->role,
+            'role' => $user->role ?? 'Mahasiswa',
+            'department' => $user->department ?? 'Informatika',
+            'nim' => $user->nim ?? '-',
             'avatar_url' => $user->avatar_url,
         ];
     }
