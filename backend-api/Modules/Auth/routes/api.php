@@ -20,6 +20,7 @@ Route::prefix('auth')->group(function () {
             return response()->json($request->user());
         });
         Route::put('/profile', [AuthController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [AuthController::class, 'updateAvatar']);
         Route::put('/password', [AuthController::class, 'updatePassword']);
         Route::post('/phone/send-otp', [AuthController::class, 'sendPhoneOtp']);
         Route::post('/phone/verify-otp', [AuthController::class, 'verifyPhoneOtp']);
