@@ -19,6 +19,7 @@ interface ItemCardProps {
   status: "Hilang" | "Menunggu Validasi" | "Selesai" | string; // Tambahkan 'string' agar lebih fleksibel menerima data API
   imageUrl: string;
   isUrgent?: boolean;
+  isOldest?: boolean;
 }
 
 export default function ItemCard({
@@ -31,6 +32,7 @@ export default function ItemCard({
   status,
   imageUrl,
   isUrgent,
+  isOldest,
 }: ItemCardProps) {
   const statusColors: Record<string, string> = {
     Hilang:
@@ -61,11 +63,15 @@ export default function ItemCard({
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className="w-full h-full object-cover"
           />
-          {isUrgent && (
+          {isOldest ? (
+            <div className="absolute top-3 left-3 bg-amber-500 text-black font-extrabold text-[11px] px-3 py-1 rounded-lg flex items-center gap-1 shadow-lg border border-amber-300">
+              <Clock size={13} /> LAPORAN WAKTU TERLAMA (BANTU TEMUKAN)
+            </div>
+          ) : isUrgent ? (
             <div className="absolute top-4 left-4 bg-danger text-white text-xs font-bold px-3 py-1.5 rounded-md flex items-center gap-1 shadow-md">
               <AlertCircle size={14} /> URGENT
             </div>
-          )}
+          ) : null}
         </div>
         <div className="w-full sm:w-3/5 p-6 flex flex-col justify-between">
           <div>

@@ -18,7 +18,7 @@ interface AuthState {
   isLoading: boolean;
 
   // Fungsi-fungsi aksi yang sekarang berbasis Promise (async)
-  login: (credentials: Record<string, string>) => Promise<void>;
+  login: (credentials: Record<string, string>) => Promise<User>;
   register: (userData: Record<string, string>) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -35,9 +35,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Tembak API Login dan langsung tangkap data user dari response-nya
     const { data } = await axios.post("/api/auth/login", credentials);
 
-    // Simpan data user ke state TANPA perlu menembak /me lagi
-    // Asumsinya respon Laravel Anda: { message: "Login berhasil", user: { ... } }
     set({ user: data.user, isAuthenticated: true });
+    return data.user;
   },
 
   register: async (userData) => {

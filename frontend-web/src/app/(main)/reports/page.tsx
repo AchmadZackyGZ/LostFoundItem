@@ -7,6 +7,9 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Sparkles,
+  X,
+  BellRing,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -21,27 +24,48 @@ interface MyItem {
   category: string;
   status: string;
   date: string;
-  image_path?: string; // Ditambahkan opsional karena di backend sebelumnya belum di-map
+  image_path?: string;
 }
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<MyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
 
-  // Tarik data laporan dari API
+  // Tarik data laporan dari API dengan 5-detik interval polling real-time
+  const fetchMyItems = async () => {
+    try {
+      const response = await api.get("/api/v1/my-items");
+      const newItems: MyItem[] = response.data.data || [];
+
+      setReports((prevReports) => {
+        if (prevReports.length > 0) {
+          prevReports.forEach((oldItem) => {
+            const updated = newItems.find((n) => n.id === oldItem.id);
+            if (
+              oldItem.status === "pending" &&
+              updated &&
+              (updated.status === "active" || updated.status === "is_pending")
+            ) {
+              setApprovalAlert(
+                `🎉 SELAMAT! Laporan "${updated.title}" milik Anda telah DISETUJUI Admin dan sekarang resmi tayang di publik!`,
+              );
+            }
+          });
+        }
+        return newItems;
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data laporan:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchMyItems = async () => {
-      try {
-        const response = await api.get("/api/v1/my-items");
-        setReports(response.data.data);
-      } catch (error) {
-        console.error("Gagal mengambil data laporan:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchMyItems();
+    const interval = setInterval(fetchMyItems, 5000); // Polling otomatis setiap 5 detik
+    return () => clearInterval(interval);
   }, []);
 
   // Hitung Statistik secara Dinamis
@@ -77,6 +101,29 @@ export default function ReportsPage() {
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-10 max-w-5xl">
+      {/* REAL-TIME APPROVAL NOTIFICATION TOAST ALERT */}
+      {approvalAlert && (
+        <div className="mb-6 p-4 bg-emerald-600 text-white rounded-2xl shadow-xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300 border border-emerald-400">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <BellRing size={20} className="animate-bounce" />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm">Notifikasi Persetujuan Admin</h4>
+              <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                {approvalAlert}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setApprovalAlert(null)}
+            className="p-1 hover:bg-white/20 rounded-lg transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
@@ -151,7 +198,7 @@ export default function ReportsPage() {
 
               return (
                 <Link
-                  href={`/items/${report.id}`} // Supaya card-nya bisa diklik
+                  href={`/items/${report.id}`}
                   key={report.id}
                   className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer block"
                 >

@@ -32,10 +32,14 @@ export default function LoginPage() {
 
     try {
       // Tembak API Backend
-      await login({ email, password });
+      const user = await login({ email, password });
 
-      // Jika sukses, arahkan ke Dashboard
-      router.push("/");
+      // Jika role === admin, arahkan ke Admin Command Center (/admin)
+      if (user?.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/");
+      }
     } catch (error: unknown) {
       // 👈 3. Gunakan axios.isAxiosError untuk memvalidasi tipe error
       if (axios.isAxiosError(error)) {
