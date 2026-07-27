@@ -8,9 +8,16 @@ use Illuminate\Http\Request;
 use Modules\Item\Http\Requests\StoreDiscussionRequest;
 use Modules\Item\Models\Discussion;
 use Modules\Item\Models\Item;
+use Modules\Notification\Contracts\NotificationServiceInterface;
 
 class DiscussionController extends Controller
 {
+    private NotificationServiceInterface $notificationService;
+
+    public function __construct(NotificationServiceInterface $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
 
     public function store(StoreDiscussionRequest $request, string $itemId): JsonResponse
     {
@@ -21,58 +28,29 @@ class DiscussionController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
+        $userId = $request->user()->id;
+
         // Simpan komentar
         $discussion = Discussion::create([
             'item_id' => $item->id,
-            'user_id' => $request->user()->id, // UUID user yang login
+            'user_id' => $userId, // UUID user yang login
             'message' => $request->message,
         ]);
+
+        // Kirim Notifikasi ke pembuat laporan jika bukan dirinya sendiri
+        if ($item->user_id !== $userId) {
+            $this->notificationService->send(
+                $item->user_id,
+                'Balasan Diskusi Baru',
+                "Seseorang membalas komentar anda pada item {$item->title}.",
+                'discussion',
+                "/items/{$item->id}"
+            );
+        }
 
         return response()->json([
             'message' => 'Komentar berhasil ditambahkan.',
             'data' => $discussion
         ], 201);
     }
-
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        return view('item::index');
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return view('item::create');
-    }
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('item::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('item::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }

@@ -8,25 +8,16 @@ use Illuminate\Http\Request;
 use Modules\Item\Http\Requests\StoreClaimRequest;
 use Modules\Item\Models\Claim;
 use Modules\Item\Models\Item;
+use Modules\Notification\Contracts\NotificationServiceInterface;
 
 class ClaimController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        return view('item::index');
-    }
+    private NotificationServiceInterface $notificationService;
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function __construct(NotificationServiceInterface $notificationService)
     {
-        return view('item::create');
+        $this->notificationService = $notificationService;
     }
-
     /**
      * Store a newly created resource in storage.
      */
@@ -74,8 +65,17 @@ class ClaimController extends Controller
 
         // 2. Ubah status barang menjadi pending_claim (Mengunci barang)
         $item->update([
-            'status' => 'pending_claim'
+            'status' => 'is_pending'
         ]);
+
+        // 3. Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $request->user()->id,
+            'Pengajuan Klaim Terkirim',
+            "Klaim anda untuk {$item->title} telah diajukan dan menunggu verifikasi admin.",
+            'claim',
+            "/items/{$item->id}"
+        );
 
         return response()->json([
             'message' => 'Klaim berhasil diajukan. Silakan tunggu verifikasi bukti kepemilikan oleh Admin',
@@ -110,30 +110,4 @@ class ClaimController extends Controller
             'data' => $mappedClaims
         ], 200);
     }
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('item::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('item::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }

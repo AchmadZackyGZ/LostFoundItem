@@ -8,23 +8,59 @@ use Illuminate\Http\Request;
 use Modules\Item\Http\Requests\StoreItemRequest;
 use Modules\Item\Models\Item;
 use Modules\Auth\Contracts\AuthClientInterface; // <-- Import Interface dari Modul Auth
+use Modules\Notification\Contracts\NotificationServiceInterface; // <-- Import Interface dari Modul Notification
 
 class ItemController extends Controller
 {
 
     private AuthClientInterface $authClient;
+    private NotificationServiceInterface $notificationService;
 
     // Suntikkan Interface via Constructor (Dependency Injection)
-    public function __construct(AuthClientInterface $authClient)
-    {
+    public function __construct(
+        AuthClientInterface $authClient,
+        NotificationServiceInterface $notificationService
+    ) {
         $this->authClient = $authClient;
+        $this->notificationService = $notificationService;
     }
 
     // get all seluruh daftar laporan barang
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        // Ambil barang beserta relasi internalnya (kategori)
-        $items = Item::with('category')->latest()->get();
+        // 🔥 TAMBAHKAN FILTER: Hanya ambil yang BUKAN pending
+        $query = Item::with('category')->where('status', '!=', 'pending');
+
+        // Filter Pencarian (Nama, Lokasi, Deskripsi, ID)
+        if ($request->filled('search')) {
+            $search = strtolower($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(title) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(location) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$search}%"])
+                  ->orWhere('id', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter Kategori
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->input('category_id'));
+        }
+
+        // Filter Status (active, is_pending, completed)
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Filter Tipe (lost / found atau kehilangan / temuan)
+        if ($request->filled('type')) {
+            $type = strtolower($request->input('type'));
+            if ($type === 'kehilangan') $type = 'lost';
+            if ($type === 'temuan') $type = 'found';
+            $query->where('type', $type);
+        }
+
+        $items = $query->latest()->get();
 
         // Mapping data untuk menggabungkan dengan data User (Pelapor)
         $mappedItems = $items->map(function ($item) {
@@ -36,6 +72,7 @@ class ItemController extends Controller
                 'type' => $item->type,
                 'title' => $item->title,
                 'category' => $item->category->name ?? 'Tanpa Kategori',
+                'category_id' => $item->category_id,
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
@@ -43,6 +80,7 @@ class ItemController extends Controller
                 'status' => $item->status,
                 'is_urgent' => $item->is_urgent,
                 'created_at' => $item->created_at,
+                'time' => $item->created_at ? $item->created_at->diffForHumans() : '',
                 // Gabungkan data user ke dalam respons
                 'reporter' => [
                     'id' => $user['id'] ?? null,
@@ -110,6 +148,64 @@ class ItemController extends Controller
         ], 200);
     }
 
+    // --- FUNGSI BARU UNTCH DASHBOARD STATS ---
+    public function getDashboardStats(): JsonResponse
+    {
+        // Hitung total laporan aktif yang belum selesai/dikembalikan (Hilang & Ditemukan)
+        $reported = Item::whereIn('status', ['active'])->count();
+
+        // Misalkan Anda memiliki cara khusus melacak 'found', namun dari struktur Anda sepertinya
+        // bisa diambil dari tipe (type) laporan yang dilaporkan sebagai 'temuan'
+        $found = Item::where('type', 'temuan')->where('status', 'active')->count();
+
+        // Hitung total laporan yang sudah berstatus 'completed' (Selesai/Dikembalikan)
+        $returned = Item::where('status', 'completed')->count();
+
+        return response()->json([
+            'reported' => $reported,
+            'found' => $found,
+            'returned' => $returned
+        ], 200);
+    }
+
+    // --- FUNGSI AMBIL KATEGORI DINAMIS ---
+    public function getCategories(): \Illuminate\Http\JsonResponse
+    {
+        // Ambil semua kategori, urutkan berdasarkan abjad nama
+        $categories = \Modules\Item\Models\Category::select('id', 'name')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json($categories, 200);
+    }
+
+    // --- FUNGSI BARU UNTUK 4 BARANG TERBARU DASHBOARD ---
+    public function getRecentItems(): JsonResponse
+    {
+        // Ambil 4 barang terbaru yang statusnya masih aktif
+        $items = Item::with('category')
+            ->where('status', 'active')
+            ->latest()
+            ->take(4)
+            ->get();
+
+        $mappedItems = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'title' => $item->title,
+                'location' => $item->location,
+                // Format waktu sederhana, bisa Anda sesuaikan menggunakan Carbon
+                'time' => $item->created_at->diffForHumans(),
+                'description' => $item->description,
+                'status' => 'Hilang', // Karena di tabel Anda status defaultnya 'active' 
+                'isUrgent' => (bool) $item->is_urgent,
+                'imageUrl' => $item->image_path ?? 'https://via.placeholder.com/400' // Gambar fallback
+            ];
+        });
+
+        return response()->json($mappedItems, 200);
+    }
+
     public function myItems(Request $request): JsonResponse
     {
         // Ambil ID user yang sedang login dari token
@@ -127,6 +223,7 @@ class ItemController extends Controller
                 'id' => $item->id,
                 'type' => $item->type,
                 'title' => $item->title,
+                'image_path' => $item->image_path,
                 'category' => $item->category->name ?? 'Tanpa Kategori',
                 'status' => $item->status,
                 'date' => $item->date,
@@ -153,6 +250,13 @@ class ItemController extends Controller
             return response()->json([
                 'message' => 'Akses ditolak: Ini bukan laporan barang Anda.'
             ], 403);
+        }
+
+        // 🔥 TAMBAHAN: GEMBOK STATUS (Tidak boleh edit barang yang sedang diproses/selesai)
+        if (in_array($item->status, ['is_pending', 'completed'])) {
+            return response()->json([
+                'message' => 'Laporan tidak bisa diubah karena sedang dalam proses klaim atau sudah selesai.'
+            ], 400);
         }
 
         $validated = $request->validate([
@@ -206,12 +310,19 @@ class ItemController extends Controller
             ], 403);
         }
 
-        // 🚨 CEGAH HAPUS SAAT PROSES KLAIM
-        if ($item->status !== 'active') {
+        // 🔥 PERBAIKAN: Hanya blokir jika statusnya sedang diklaim atau sudah selesai
+        if (in_array($item->status, ['is_pending', 'completed'])) {
             return response()->json([
-                'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim oleh orang lain.'
+                'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim atau sudah diselesaikan.'
             ], 400);
         }
+
+        // // 🚨 CEGAH HAPUS SAAT PROSES KLAIM
+        // if ($item->status !== 'active') {
+        //     return response()->json([
+        //         'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim oleh orang lain.'
+        //     ], 400);
+        // }
 
         // ☁️ HAPUS GAMBAR DARI CLOUDINARY SEBELUM DATA DIHAPUS
         if ($item->image_path) {
@@ -257,13 +368,84 @@ class ItemController extends Controller
             'location' => $request->location,
             'date' => $request->date,
             'image_path' => $imageUrl,
-            'status' => 'active',
+            'status' => 'pending',
             'is_urgent' => false,
         ]);
+
+        // 3. Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $request->user()->id,
+            $item->type === 'lost' ? 'Laporan Barang Hilang Dibuat' : 'Laporan Barang Temuan Dibuat',
+            "Anda melaporkan " . ($item->type === 'lost' ? 'kehilangan' : 'penemuan') . " {$item->title} di area {$item->location}.",
+            'report',
+            "/items/{$item->id}"
+        );
 
         return response()->json([
             'message' => 'Laporan berhasil dibuat.',
             'data' => $item
         ], 201);
+    }
+
+    // =========================================================================
+    // FUNGSI KHUSUS ADMIN (PRD: VALIDASI LAPORAN BARU)
+    // =========================================================================
+
+    /**
+     * Admin: Melihat daftar laporan yang masih pending
+     */
+    public function getPendingItems(): JsonResponse
+    {
+        $items = Item::with('category')->where('status', 'pending')->latest()->get();
+
+        $mappedItems = $items->map(function ($item) {
+            $user = $this->authClient->getUserById($item->user_id);
+            return [
+                'id' => $item->id,
+                'type' => $item->type,
+                'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
+                'date' => $item->date,
+                'reporter' => $user['name'] ?? 'Anonim'
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil daftar antrean laporan baru',
+            'data' => $mappedItems
+        ], 200);
+    }
+
+    /**
+     * Admin: Menyetujui laporan agar tayang di publik
+     */
+    public function approvePendingItem(string $id): JsonResponse
+    {
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Laporan barang tidak ditemukan'], 404);
+        }
+
+        if ($item->status !== 'pending') {
+            return response()->json(['message' => 'Laporan ini tidak dalam status pending'], 400);
+        }
+
+        // Ubah status menjadi active agar tayang di dasbor publik
+        $item->update(['status' => 'active']);
+
+        // Kirim Notifikasi via Contract (Modular Monolith)
+        $this->notificationService->send(
+            $item->user_id,
+            'Laporan Barang Disetujui',
+            "Laporan anda untuk {$item->title} telah diverifikasi dan disetujui oleh admin.",
+            'report',
+            "/items/{$item->id}"
+        );
+
+        return response()->json([
+            'message' => 'Laporan barang berhasil disetujui dan tayang di publik.',
+            'data' => $item
+        ], 200);
     }
 }

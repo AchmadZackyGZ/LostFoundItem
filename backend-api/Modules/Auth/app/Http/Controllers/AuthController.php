@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Modules\Auth\Emails\VerificationEmail;
 use Modules\Auth\Http\Requests\LoginRequest;
@@ -29,12 +30,21 @@ class AuthController extends Controller
 
     public function register(RegisterRequest $request): JsonResponse
     {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8|confirmed',
+            'nim' => 'required|string|unique:users', // Komen dihapus
+            'department' => 'required|string',
+        ]);
+
         $user = User::create([
             'name' => $request->name,
             'nim' => $request->nim,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'mahasiswa', // Default role sesuai PRD
+            'department' => $request->department,
         ]);
 
         $this->sendOtpEmail($user->email);
@@ -101,6 +111,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Silakan verifikasi email Anda terlebih dahulu.'], 403);
         }
 
+        // 🔥 TAMBAHKAN 2 BARIS INI: Ini kunci utama untuk SPA Authentication (Next.js)
+        // Mendaftarkan user ke session dan mencegah serangan session fixation
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        // Pembuatan token di bawah ini boleh tetap dibiarkan jika Anda 
+        // berencana membuat versi Mobile App (React Native/Flutter) nantinya.
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -115,6 +132,48 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Logout berhasil.']);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'department' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|nullable|string|max:30',
+        ]);
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui.',
+            'user' => $user
+        ], 200);
+    }
+
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Password saat ini tidak sesuai.'
+            ], 400);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json([
+            'message' => 'Password berhasil diperbarui.'
+        ], 200);
     }
 
     // kode kode dibawah hasil generate dari php laravel nya jadi jika kita frontend nya menggunakan .blade maka 
