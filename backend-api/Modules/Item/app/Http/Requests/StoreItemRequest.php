@@ -17,8 +17,23 @@ class StoreItemRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'location' => ['required', 'string', 'max:255'],
-            'date' => ['required', 'date'],
-            'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'], // Max 5MB
+            'date' => ['required', 'date', 'before_or_equal:today'],
+            'images' => ['required_without:image', 'array', 'min:1', 'max:5'],
+            'images.*' => ['image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
+            'image' => ['required_without:images', 'nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     */
+    public function messages(): array
+    {
+        return [
+            'date.before_or_equal' => 'Tanggal tidak valid. Anda tidak dapat membuat laporan dengan tanggal di masa depan (lebih dari hari ini).',
+            'images.required_without' => 'Wajib mengunggah minimal 1 foto barang.',
+            'image.required_without' => 'Wajib mengunggah minimal 1 foto barang.',
+            'images.min' => 'Wajib mengunggah minimal 1 foto barang.',
         ];
     }
 

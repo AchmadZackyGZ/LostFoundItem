@@ -176,6 +176,112 @@ class AuthController extends Controller
         ], 200);
     }
 
+    public function sendPhoneOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'phone' => 'required|string|max:30',
+        ]);
+
+        $user = $request->user();
+        $rawPhone = trim($request->phone);
+
+        // Format nomor Indonesia (contoh: 082228244745 -> 6282228244745)
+        $phone = preg_replace('/[^0-9]/', '', $rawPhone);
+        if (str_starts_with($phone, '0')) {
+            $phone = '62' . substr($phone, 1);
+        }
+
+        $otp = (string) rand(100000, 999999);
+
+        // Simpan OTP ke cache dengan key user ID selama 10 menit
+        Cache::put('otp_phone_' . $user->id, [
+            'phone' => $phone,
+            'otp' => $otp,
+        ], now()->addMinutes(10));
+
+        // 1. Kirim via Fonnte WhatsApp API jika FONNTE_TOKEN tersedia di .env
+        $fonnteToken = trim(env('FONNTE_TOKEN'));
+        $waSent = false;
+        $fonnteError = null;
+
+        if (!empty($fonnteToken)) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'Authorization' => $fonnteToken,
+                ])->post('https://api.fonnte.com/send', [
+                    'target' => $phone,
+                    'message' => "*[TraceBack - Lost & Found UISI]*\n\nKode OTP Verifikasi WhatsApp Anda adalah: *{$otp}*\n\nKode ini berlaku selama 10 menit. Jangan bagikan kode ini kepada siapapun.",
+                ]);
+
+                $resData = $response->json();
+                if ($response->successful() && isset($resData['status']) && $resData['status'] === true) {
+                    $waSent = true;
+                } else {
+                    $fonnteError = $resData['reason'] ?? 'Gagal mengirim WA';
+                    \Illuminate\Support\Facades\Log::warning("Fonnte WA Response Warning: ", $resData ?? []);
+                }
+            } catch (\Throwable $e) {
+                $fonnteError = $e->getMessage();
+                \Illuminate\Support\Facades\Log::error("Fonnte WA OTP Exception: " . $e->getMessage());
+            }
+        }
+
+        // 2. Kirim juga kode OTP ke email kampus pengguna yang terdaftar sebagai cadangan
+        try {
+            Mail::to($user->email)->send(new VerificationEmail($otp));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Email OTP Error: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => $waSent
+                ? "Kode OTP 6-digit telah berhasil dikirim ke WhatsApp {$phone}."
+                : "Kode OTP 6-digit telah dikirim ke WhatsApp {$phone} dan Email kampus Anda ({$user->email}).",
+            'phone' => $phone,
+            'wa_sent' => $waSent,
+            'fonnte_error' => $fonnteError,
+        ], 200);
+    }
+
+    public function verifyPhoneOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'otp' => 'required|string|size:6',
+        ]);
+
+        $user = $request->user();
+        $cachedData = Cache::get('otp_phone_' . $user->id);
+
+        if (!$cachedData || $cachedData['otp'] !== $request->otp) {
+            return response()->json([
+                'message' => 'Kode OTP tidak valid atau sudah kedaluwarsa.'
+            ], 400);
+        }
+
+        // OTP Valid: Update nomor HP dan status terverifikasi
+        $user->phone = $cachedData['phone'];
+        $user->phone_verified_at = now();
+        $user->save();
+
+        Cache::forget('otp_phone_' . $user->id);
+
+        // Kirim Notifikasi via Contract jika modul Notification tersedia
+        if (app()->bound(\Modules\Notification\Contracts\NotificationServiceInterface::class)) {
+            app(\Modules\Notification\Contracts\NotificationServiceInterface::class)->send(
+                $user->id,
+                'Nomor Telepon Terhubung',
+                "Nomor WhatsApp/HP {$user->phone} telah berhasil terverifikasi dan terhubung ke akun Anda.",
+                'system',
+                '/profile'
+            );
+        }
+
+        return response()->json([
+            'message' => 'Nomor telepon berhasil terverifikasi dan terhubung ke akun Anda!',
+            'user' => $user,
+        ], 200);
+    }
+
     // kode kode dibawah hasil generate dari php laravel nya jadi jika kita frontend nya menggunakan .blade maka 
     // logic logic yang diatas itu diganti dibawah tapi kita menggunakan FE selain .blade jadi ini hanya deadcode saja 
     // /**

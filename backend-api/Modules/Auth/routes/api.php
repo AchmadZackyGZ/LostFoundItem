@@ -21,5 +21,7 @@ Route::prefix('auth')->group(function () {
         });
         Route::put('/profile', [AuthController::class, 'updateProfile']);
         Route::put('/password', [AuthController::class, 'updatePassword']);
+        Route::post('/phone/send-otp', [AuthController::class, 'sendPhoneOtp']);
+        Route::post('/phone/verify-otp', [AuthController::class, 'verifyPhoneOtp']);
     });
 });
