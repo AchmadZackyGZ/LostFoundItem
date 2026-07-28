@@ -6,16 +6,18 @@ use Modules\Item\Http\Controllers\ItemController;
 use Modules\Item\Http\Controllers\DiscussionController;
 use Modules\Item\Http\Controllers\ClaimController;
 
+// RUTE PUBLIK DASHBOARD & KATALOG (Bebas diakses tanpa login)
+Route::prefix('v1')->group(function () {
+    Route::get('/dashboard/stats', [ItemController::class, 'getDashboardStats']);
+    Route::get('/items/recent', [ItemController::class, 'getRecentItems']);
+    Route::get('/categories', [ItemController::class, 'getCategories']);
+});
+
 Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
     // RUTE SPESIFIK (Wajib di atas)
     Route::get('/my-items', [ItemController::class, 'myItems']);
     Route::get('/my-claims', [ClaimController::class, 'myClaims']);
-
-    Route::get('/dashboard/stats', [ItemController::class, 'getDashboardStats']);
-    Route::get('/items/recent', [ItemController::class, 'getRecentItems']);
-
-    Route::get('/categories', [ItemController::class, 'getCategories']);
 
     // RUTE REKURSIF KELOLA ITEM
     Route::apiResource('items', ItemController::class)->names('item');
@@ -34,6 +36,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
 
     Route::get('/items/pending', [ItemController::class, 'getPendingItems']);
+    Route::get('/inventory', [ItemController::class, 'getAdminInventory']);
+    Route::get('/stats', [ItemController::class, 'getAdminStats']);
+    Route::delete('/items/{id}', [ItemController::class, 'adminDestroyItem']);
 
     // Lihat semua antrean klaim
     Route::get('/claims', [AdminClaimController::class, 'index']);

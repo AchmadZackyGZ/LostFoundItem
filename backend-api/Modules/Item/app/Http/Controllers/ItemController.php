@@ -25,6 +25,28 @@ class ItemController extends Controller
         $this->notificationService = $notificationService;
     }
 
+    private function parseImageUrls(?string $imagePath): array
+    {
+        if (empty($imagePath)) {
+            return [];
+        }
+
+        if (str_starts_with(trim($imagePath), '[')) {
+            $decoded = json_decode($imagePath, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [$imagePath];
+    }
+
+    private function getPrimaryImageUrl(?string $imagePath): ?string
+    {
+        $urls = $this->parseImageUrls($imagePath);
+        return $urls[0] ?? null;
+    }
+
     // get all seluruh daftar laporan barang
     public function index(Request $request): JsonResponse
     {
@@ -76,7 +98,8 @@ class ItemController extends Controller
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'status' => $item->status,
                 'is_urgent' => $item->is_urgent,
                 'created_at' => $item->created_at,
@@ -110,12 +133,21 @@ class ItemController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
+        // Cache user lookups in memory to avoid repeated DB/API calls
+        $userCache = [];
+        $getUser = function ($userId) use (&$userCache) {
+            if (!isset($userCache[$userId])) {
+                $userCache[$userId] = $this->authClient->getUserById($userId);
+            }
+            return $userCache[$userId];
+        };
+
         // Panggil Modul Auth untuk data Pelapor
-        $reporter = $this->authClient->getUserById($item->user_id);
+        $reporter = $getUser($item->user_id);
 
         // Mapping data komentar untuk menyisipkan nama pembuat komentar
-        $discussions = $item->discussions->map(function ($discussion) {
-            $commenter = $this->authClient->getUserById($discussion->user_id);
+        $discussions = $item->discussions->map(function ($discussion) use ($getUser) {
+            $commenter = $getUser($discussion->user_id);
             return [
                 'id' => $discussion->id,
                 'message' => $discussion->message,
@@ -123,6 +155,11 @@ class ItemController extends Controller
                 'user' => [
                     'id' => $commenter['id'] ?? null,
                     'name' => $commenter['name'] ?? 'Anonim',
+                    'email' => $commenter['email'] ?? '-',
+                    'department' => $commenter['department'] ?? 'Informatika',
+                    'role' => $commenter['role'] ?? 'Mahasiswa',
+                    'nim' => $commenter['nim'] ?? '-',
+                    'avatar_url' => $commenter['avatar_url'] ?? null,
                 ]
             ];
         });
@@ -137,11 +174,13 @@ class ItemController extends Controller
                 'description' => $item->description,
                 'location' => $item->location,
                 'date' => $item->date,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'status' => $item->status,
                 'reporter' => [
                     'name' => $reporter['name'] ?? 'Anonim',
-                    'email' => $reporter['email'] ?? '-'
+                    'email' => $reporter['email'] ?? '-',
+                    'avatar_url' => $reporter['avatar_url'] ?? null,
                 ],
                 'discussions' => $discussions // Masukkan array komentar yang sudah di-mapping
             ]
@@ -179,27 +218,45 @@ class ItemController extends Controller
         return response()->json($categories, 200);
     }
 
-    // --- FUNGSI BARU UNTUK 4 BARANG TERBARU DASHBOARD ---
-    public function getRecentItems(): JsonResponse
+    // --- FUNGSI AMBIL BARANG UNTUK DASHBOARD PUBLIK (HERO BANNER = BARANG TERLAMA) ---
+    public function getRecentItems(Request $request): JsonResponse
     {
-        // Ambil 4 barang terbaru yang statusnya masih aktif
-        $items = Item::with('category')
+        $limit = (int) $request->input('limit', 7); // Default 7 items (1 hero + 6 vertical cards)
+
+        // 1. Ambil 1 barang tayang (active) dengan waktu terlama (oldest) untuk Featured Banner Utama
+        $oldestItem = Item::with('category')
             ->where('status', 'active')
+            ->oldest()
+            ->first();
+
+        if (!$oldestItem) {
+            return response()->json([], 200);
+        }
+
+        // 2. Ambil sisanya dari laporan terbaru (latest)
+        $latestItems = Item::with('category')
+            ->where('status', 'active')
+            ->where('id', '!=', $oldestItem->id)
             ->latest()
-            ->take(4)
+            ->take(max(1, $limit - 1))
             ->get();
 
-        $mappedItems = $items->map(function ($item) {
+        // 3. Gabungkan: Paling depan [0] adalah barang waktu TERLAMA
+        $allFeaturedItems = collect([$oldestItem])->merge($latestItems);
+
+        $mappedItems = $allFeaturedItems->map(function ($item) {
             return [
                 'id' => $item->id,
                 'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
                 'location' => $item->location,
-                // Format waktu sederhana, bisa Anda sesuaikan menggunakan Carbon
-                'time' => $item->created_at->diffForHumans(),
+                'time' => $item->created_at ? $item->created_at->diffForHumans() : 'Baru saja',
+                'created_at' => $item->created_at,
                 'description' => $item->description,
-                'status' => 'Hilang', // Karena di tabel Anda status defaultnya 'active' 
+                'status' => $item->type === 'lost' ? 'Hilang' : 'Temuan',
+                'type' => $item->type,
                 'isUrgent' => (bool) $item->is_urgent,
-                'imageUrl' => $item->image_path ?? 'https://via.placeholder.com/400' // Gambar fallback
+                'imageUrl' => $this->getPrimaryImageUrl($item->image_path) ?? 'https://via.placeholder.com/400'
             ];
         });
 
@@ -223,7 +280,8 @@ class ItemController extends Controller
                 'id' => $item->id,
                 'type' => $item->type,
                 'title' => $item->title,
-                'image_path' => $item->image_path,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
                 'category' => $item->category->name ?? 'Tanpa Kategori',
                 'status' => $item->status,
                 'date' => $item->date,
@@ -345,18 +403,42 @@ class ItemController extends Controller
      */
     public function store(StoreItemRequest $request): JsonResponse
     {
-        $imageUrl = null;
+        // 🚨 GEMBOK AKUN ROLE ADMIN: Admin tidak diperbolehkan membuat laporan barang
+        if ($request->user()->role === 'admin') {
+            error_log("admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang");
+            \Illuminate\Support\Facades\Log::warning("admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang");
 
-        if ($request->hasFile('image')) {
-            $uploadedFileUrl = cloudinary()->upload(
+            return response()->json([
+                'message' => 'admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang'
+            ], 403);
+        }
+
+        $uploadedUrls = [];
+
+        // Upload multiple images if 'images' array is sent
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                $uploadedUrls[] = cloudinary()->upload(
+                    $file->getRealPath(),
+                    [
+                        'folder' => 'lost_found_uisi'
+                    ]
+                )->getSecurePath();
+            }
+        } elseif ($request->hasFile('image')) {
+            // Fallback jika dikirim via field single 'image'
+            $uploadedUrls[] = cloudinary()->upload(
                 $request->file('image')->getRealPath(),
                 [
                     'folder' => 'lost_found_uisi'
                 ]
             )->getSecurePath();
-
-            $imageUrl = $uploadedFileUrl;
         }
+
+        // Jika lebih dari 1 gambar, simpan sebagai JSON String. Jika 1 gambar, simpan URL langsung.
+        $imageUrl = count($uploadedUrls) > 1
+            ? json_encode($uploadedUrls)
+            : ($uploadedUrls[0] ?? null);
 
         // 2. Simpan Data ke Database
         $item = Item::create([
@@ -446,6 +528,97 @@ class ItemController extends Controller
         return response()->json([
             'message' => 'Laporan barang berhasil disetujui dan tayang di publik.',
             'data' => $item
+        ], 200);
+    }
+
+    /**
+     * Admin: Melihat seluruh inventaris barang (Semua Status)
+     */
+    public function getAdminInventory(Request $request): JsonResponse
+    {
+        $query = Item::with('category')->latest();
+
+        if ($request->has('type') && in_array($request->type, ['lost', 'found'])) {
+            $query->where('type', $request->type);
+        }
+
+        if ($request->has('status') && in_array($request->status, ['pending', 'active', 'is_pending', 'completed'])) {
+            $query->where('status', $request->status);
+        }
+
+        $items = $query->get();
+
+        $mappedItems = $items->map(function ($item) {
+            $user = $this->authClient->getUserById($item->user_id);
+            return [
+                'id' => $item->id,
+                'type' => $item->type,
+                'title' => $item->title,
+                'category' => $item->category->name ?? 'Tanpa Kategori',
+                'location' => $item->location,
+                'description' => $item->description,
+                'date' => $item->date,
+                'image_path' => $this->getPrimaryImageUrl($item->image_path),
+                'images' => $this->parseImageUrls($item->image_path),
+                'status' => $item->status,
+                'created_at' => $item->created_at,
+                'reporter' => [
+                    'id' => $user['id'] ?? $item->user_id,
+                    'name' => $user['name'] ?? 'Anonim',
+                    'email' => $user['email'] ?? '-',
+                    'avatar_url' => $user['avatar_url'] ?? null,
+                ]
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Berhasil mengambil seluruh data inventaris admin',
+            'data' => $mappedItems
+        ], 200);
+    }
+
+    /**
+     * Admin: Statistik Lengkap Dashboard Admin (Real Database Analytics)
+     */
+    public function getAdminStats(): JsonResponse
+    {
+        $totalItems = Item::count();
+        $completedItems = Item::where('status', 'completed')->count();
+        $successRate = $totalItems > 0 ? round(($completedItems / $totalItems) * 100, 1) : 0;
+        $pendingClaims = \Modules\Item\Models\Claim::where('status', 'pending')->count();
+        $activeUsers = \App\Models\User::count();
+
+        return response()->json([
+            'total_items' => $totalItems,
+            'completed_items' => $completedItems,
+            'success_rate' => $successRate,
+            'pending_claims' => $pendingClaims,
+            'active_users' => $activeUsers,
+        ], 200);
+    }
+
+    /**
+     * Admin: Menghapus laporan barang secara paksa dari inventaris
+     */
+    public function adminDestroyItem(string $id): JsonResponse
+    {
+        $item = Item::find($id);
+
+        if (!$item) {
+            return response()->json(['message' => 'Barang tidak ditemukan'], 404);
+        }
+
+        if ($item->image_path) {
+            if (preg_match('/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/', $item->image_path, $matches)) {
+                $publicId = $matches[1];
+                cloudinary()->destroy($publicId);
+            }
+        }
+
+        $item->delete();
+
+        return response()->json([
+            'message' => 'Laporan barang berhasil dihapus dari inventaris oleh Admin.'
         ], 200);
     }
 }

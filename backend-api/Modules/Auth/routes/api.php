@@ -20,6 +20,20 @@ Route::prefix('auth')->group(function () {
             return response()->json($request->user());
         });
         Route::put('/profile', [AuthController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [AuthController::class, 'updateAvatar']);
         Route::put('/password', [AuthController::class, 'updatePassword']);
+        Route::post('/phone/send-otp', [AuthController::class, 'sendPhoneOtp']);
+        Route::post('/phone/verify-otp', [AuthController::class, 'verifyPhoneOtp']);
     });
+});
+
+/*
+|--------------------------------------------------------------------------
+| API ROLE ADMIN USER MANAGEMENT
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
+    Route::get('/users', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'index']);
+    Route::put('/users/{id}/verify', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'verifyUser']);
+    Route::delete('/users/{id}', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'destroy']);
 });

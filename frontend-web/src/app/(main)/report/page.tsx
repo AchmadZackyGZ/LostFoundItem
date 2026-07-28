@@ -1,27 +1,39 @@
 "use client";
 
-import { Suspense, useState, useRef } from "react";
+import { Suspense, useState, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   UploadCloud,
   MapPin,
-  Calendar,
   X,
   Info,
   FileText,
   Send,
   Loader2,
-  Image as ImageIcon,
+  Compass,
+  Navigation,
+  Check,
+  Building2,
+  Maximize2,
+  Crosshair,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Move,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
 import api from "@/lib/axios";
 import axios from "axios";
-import { useEffect } from "react";
+
+import { useAuthStore } from "@/store/useAuthStore";
 
 function ReportFormContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user } = useAuthStore();
   const tabQuery = searchParams.get("tab");
   const reportType = tabQuery === "temuan" ? "temuan" : "kehilangan";
 
@@ -29,6 +41,16 @@ function ReportFormContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 🚨 PROTEKSI AKUN ADMIN: Admin tidak boleh membuat laporan barang
+  useEffect(() => {
+    if (user && user.role === "admin") {
+      const msg = "admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang";
+      setErrorMsg(msg);
+      alert(msg);
+      router.push("/admin");
+    }
+  }, [user, router]);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -38,7 +60,38 @@ function ReportFormContent() {
     description: "",
   });
 
-  // STATE BARU UNTUK KATEGORI DINAMIS
+  // State Keterangan Lanjutan Lokasi & Peta
+  const [locationDetail, setLocationDetail] = useState("");
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  const [isFetchingGps, setIsFetchingGps] = useState(false);
+
+  // Leaflet Map Refs
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const leafletMapInstance = useRef<unknown>(null);
+  const leafletMarkerInstance = useRef<unknown>(null);
+
+  // Default Koordinat Kampus UISI Gresik
+  const [selectedCoords, setSelectedCoords] = useState<{
+    lat: number;
+    lng: number;
+  }>({ lat: -7.1584, lng: 112.6555 });
+
+  const [mapAddressPreview, setMapAddressPreview] = useState(
+    "Kampus A UISI, Gresik, Jawa Timur",
+  );
+
+  // Preset Lokasi Kampus UISI
+  const campusPresets = [
+    { label: "📍 Kampus A UISI", value: "Kampus A UISI (Gedung Utama), Gresik" },
+    { label: "🏬 Kantin Utama", value: "Kantin Utama UISI, Lantai 1" },
+    { label: "📚 Perpustakaan", value: "Perpustakaan Kampus A UISI" },
+    { label: "💻 Lab Komputer B", value: "Lab Komputer B - Gedung A" },
+    { label: "🅿️ Parkiran Utama", value: "Area Parkir Sepeda Motor Kampus A" },
+    { label: "🏛️ Lobby Rektorat", value: "Lobby Rektorat UISI" },
+    { label: "🎭 Auditorium", value: "Auditorium Kampus UISI" },
+  ];
+
+  // STATE KATEGORI DINAMIS
   interface Category {
     id: string;
     name: string;
@@ -46,13 +99,13 @@ function ReportFormContent() {
 
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // State untuk Ciri-ciri Khusus (Tag Input)
+  // State Ciri-ciri Khusus (Tag Input)
   const [features, setFeatures] = useState<string[]>([]);
   const [featureInput, setFeatureInput] = useState("");
 
-  // State untuk Gambar
-  const [image, setImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // State Multi-Gambar (Wajib minimal 1, Maksimal 5)
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
   // --- HANDLER INPUT ---
   const handleChange = (
@@ -74,6 +127,10 @@ function ReportFormContent() {
     }
   };
 
+  const removeFeature = (tagToRemove: string) => {
+    setFeatures(features.filter((tag) => tag !== tagToRemove));
+  };
+
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -86,28 +143,196 @@ function ReportFormContent() {
     fetchCategories();
   }, []);
 
-  const removeFeature = (tagToRemove: string) => {
-    setFeatures(features.filter((tag) => tag !== tagToRemove));
-  };
+  // --- HANDLER REVERSE GEOCODING ---
+  const updateAddressByCoords = async (lat: number, lng: number) => {
+    try {
+      const res = await axios.get(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+      );
 
-  // --- HANDLER GAMBAR ---
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMsg("Ukuran gambar maksimal 5MB");
-        return;
-      }
-      setImage(file);
-      setImagePreview(URL.createObjectURL(file));
-      setErrorMsg("");
+      const road = res.data?.address?.road || res.data?.address?.suburb || "";
+      const city = res.data?.address?.city || res.data?.address?.county || "Gresik";
+      const displayName = road
+        ? `${road}, ${city} (Kampus UISI)`
+        : res.data?.display_name || `Area Kampus UISI (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+      setMapAddressPreview(displayName);
+    } catch {
+      const fallback = `Area Kampus UISI (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      setMapAddressPreview(fallback);
     }
   };
 
-  const removeImage = () => {
-    setImage(null);
-    setImagePreview(null);
+  // --- INITIALIZE REAL-TIME LEAFLET DRAGGABLE MAP ---
+  useEffect(() => {
+    if (!isMapModalOpen) return;
+
+    const loadLeaflet = () => {
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+
+      if ((window as unknown as { L?: unknown }).L) {
+        setupLeafletMap();
+      } else {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.onload = () => setupLeafletMap();
+        document.body.appendChild(script);
+      }
+    };
+
+    const setupLeafletMap = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const L = (window as any).L;
+      if (!L || !mapContainerRef.current) return;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (leafletMapInstance.current && (leafletMapInstance.current as any).remove) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (leafletMapInstance.current as any).remove();
+      }
+
+      const map = L.map(mapContainerRef.current).setView(
+        [selectedCoords.lat, selectedCoords.lng],
+        16,
+      );
+      leafletMapInstance.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map);
+
+      const greenIcon = L.icon({
+        iconUrl:
+          "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+        shadowUrl:
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+
+      const marker = L.marker([selectedCoords.lat, selectedCoords.lng], {
+        draggable: true,
+        icon: greenIcon,
+      }).addTo(map);
+      leafletMarkerInstance.current = marker;
+
+      marker.on("dragend", async () => {
+        const pos = marker.getLatLng();
+        setSelectedCoords({ lat: pos.lat, lng: pos.lng });
+        await updateAddressByCoords(pos.lat, pos.lng);
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.on("click", async (e: any) => {
+        const { lat, lng } = e.latlng;
+        marker.setLatLng([lat, lng]);
+        setSelectedCoords({ lat, lng });
+        await updateAddressByCoords(lat, lng);
+      });
+    };
+
+    const timer = setTimeout(loadLeaflet, 100);
+    return () => clearTimeout(timer);
+  }, [isMapModalOpen]);
+
+  // --- HANDLER GESER TITIK LOKASI D-PAD & RECENTER ---
+  const shiftLocation = async (deltaLat: number, deltaLng: number) => {
+    const newLat = selectedCoords.lat + deltaLat;
+    const newLng = selectedCoords.lng + deltaLng;
+    setSelectedCoords({ lat: newLat, lng: newLng });
+
+    if (leafletMarkerInstance.current && leafletMapInstance.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (leafletMarkerInstance.current as any).setLatLng([newLat, newLng]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (leafletMapInstance.current as any).panTo([newLat, newLng]);
+    }
+
+    await updateAddressByCoords(newLat, newLng);
+  };
+
+  // --- HANDLER GPS LOCATION DETECTOR ---
+  const handleGetCurrentLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      alert("Browser Anda tidak mendukung fungsi deteksi lokasi GPS.");
+      return;
+    }
+
+    setIsFetchingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setSelectedCoords({ lat, lng });
+
+        if (leafletMarkerInstance.current && leafletMapInstance.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (leafletMarkerInstance.current as any).setLatLng([lat, lng]);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (leafletMapInstance.current as any).setView([lat, lng], 17);
+        }
+
+        await updateAddressByCoords(lat, lng);
+        setFormData((prev) => ({ ...prev, location: mapAddressPreview }));
+        setIsFetchingGps(false);
+      },
+      (err) => {
+        console.error("GPS Error:", err);
+        alert(
+          "Gagal mengakses GPS. Pastikan Anda mengizinkan akses lokasi pada browser.",
+        );
+        setIsFetchingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  // --- HANDLER PRESET LOKASI CHIP ---
+  const handleSelectPreset = (value: string) => {
+    setFormData((prev) => ({ ...prev, location: value }));
+    setMapAddressPreview(value);
+  };
+
+  // --- HANDLER MULTI-GAMBAR ---
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+
+    const validFiles: File[] = [];
+    const validPreviews: string[] = [];
+
+    for (const file of selectedFiles) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMsg(`Ukuran foto '${file.name}' melebihi batas maksimal 5MB.`);
+        return;
+      }
+      validFiles.push(file);
+      validPreviews.push(URL.createObjectURL(file));
+    }
+
+    const updatedImages = [...images, ...validFiles].slice(0, 5);
+    const updatedPreviews = [...imagePreviews, ...validPreviews].slice(0, 5);
+
+    setImages(updatedImages);
+    setImagePreviews(updatedPreviews);
+    setErrorMsg("");
+
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeImageAt = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   // --- SUBMIT HANDLER KESELURUHAN ---
@@ -115,7 +340,9 @@ function ReportFormContent() {
     e.preventDefault();
     setErrorMsg("");
 
-    // Validasi Sederhana
+    const todayString = new Date().toISOString().split("T")[0];
+
+    // Validasi Field Wajib
     if (
       !formData.title ||
       !formData.category_id ||
@@ -126,54 +353,68 @@ function ReportFormContent() {
       return;
     }
 
+    // Validasi Tanggal Tidak Boleh di Masa Depan
+    if (formData.date > todayString) {
+      setErrorMsg(
+        "Tanggal tidak valid. Anda tidak dapat membuat laporan dengan tanggal di masa depan (lebih dari hari ini).",
+      );
+      return;
+    }
+
+    // Validasi WAJIB Mengunggah Minimal 1 Gambar
+    if (images.length === 0) {
+      setErrorMsg("Mohon unggah minimal 1 foto barang yang dilaporkan (*).");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Gabungkan deskripsi dengan ciri-ciri khusus
+      const fullLocation = locationDetail.trim()
+        ? `${formData.location} (Detail: ${locationDetail.trim()})`
+        : formData.location;
+
       const finalDescription =
         features.length > 0
           ? `${formData.description}\n\nCiri-ciri khusus: ${features.join(", ")}`
           : formData.description;
 
-      // Kita WAJIB pakai FormData karena ada pengiriman File Gambar
       const submitData = new FormData();
 
-      // Mapping ke bahasa Inggris agar lolos validasi "in:lost,found"
       const backendType = reportType === "kehilangan" ? "lost" : "found";
       submitData.append("type", backendType);
 
       submitData.append("title", formData.title);
       submitData.append("category_id", formData.category_id);
       submitData.append("date", formData.date);
-      submitData.append("location", formData.location);
+      submitData.append("location", fullLocation);
       submitData.append("description", finalDescription);
 
-      if (image) {
-        submitData.append("image", image);
+      // Append Multi-Images Array
+      images.forEach((imgFile) => {
+        submitData.append("images[]", imgFile);
+      });
+
+      // Fallback single image field
+      if (images[0]) {
+        submitData.append("image", images[0]);
       }
 
-      // 🔑 WAJIB: minta CSRF cookie dulu sebelum request stateful
       await axios.get(
         `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/sanctum/csrf-cookie`,
         { withCredentials: true },
       );
 
-      // Kembali gunakan `api` agar CSRF Sanctum bekerja otomatis!
       await api.post("/api/v1/items", submitData, {
         headers: {
-          // 🔥 TRIK RAHASIA: Set ke undefined agar Axios membuang header JSON bawaannya.
-          // Browser akan otomatis menggantinya menjadi multipart/form-data beserta boundary-nya!
           "Content-Type": undefined,
         },
       });
 
-      // 🔥 PERUBAHAN DISINI: Tambahkan notifikasi UX sesuai PRD
       window.alert(
         "Laporan berhasil dikirim! Laporan Anda sedang dalam antrean validasi Admin sebelum ditampilkan di dasbor publik.",
       );
 
-      // Jika Anda sudah punya halaman profil, lebih baik diarahkan ke "/profile".
-      // Tapi untuk sekarang kita arahkan ke "/" sesuai kode awal Anda.
       router.push("/");
     } catch (error: unknown) {
       const message = axios.isAxiosError(error)
@@ -233,7 +474,7 @@ function ReportFormContent() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
               Lapor Kehilangan
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mb-10">
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-8">
               Mohon isi detail barang yang hilang seakurat mungkin untuk
               mempermudah proses pencarian.
             </p>
@@ -264,8 +505,6 @@ function ReportFormContent() {
                     className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 appearance-none"
                   >
                     <option value="">Pilih Kategori</option>
-
-                    {/* Render opsi kategori secara dinamis dari database */}
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
@@ -282,41 +521,108 @@ function ReportFormContent() {
                       type="date"
                       name="date"
                       value={formData.date}
+                      max={new Date().toISOString().split("T")[0]}
                       onChange={handleChange}
                       className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg pl-4 pr-10 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200"
                     />
                   </div>
                 </div>
+
+                {/* FEATURE LOKASI TERAKHIR TERLIHAT & PETA PICKER */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Lokasi Terakhir Terlihat *
-                  </label>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Lokasi Terakhir Terlihat *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleGetCurrentLocation}
+                      disabled={isFetchingGps}
+                      className="text-xs text-primary dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      {isFetchingGps ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Compass size={13} />
+                      )}
+                      <span>Gunakan Lokasi Saat Ini (GPS)</span>
+                    </button>
+                  </div>
                   <div className="relative">
                     <input
                       type="text"
                       name="location"
                       value={formData.location}
                       onChange={handleChange}
-                      className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200"
-                      placeholder="Gedung, Ruangan, atau Area"
+                      className="w-full bg-[#0b1120] border border-gray-700/60 rounded-lg pl-10 pr-28 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-200"
+                      placeholder="Gedung, Ruangan, atau Area Kampus"
                     />
                     <MapPin
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                       size={18}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setIsMapModalOpen(true)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary/10 dark:bg-blue-900/30 text-primary dark:text-blue-400 hover:bg-primary/20 text-xs font-bold px-2.5 py-1.5 rounded-md transition flex items-center gap-1 border border-primary/20"
+                    >
+                      <Maximize2 size={12} /> Peta
+                    </button>
                   </div>
                 </div>
               </div>
 
+              {/* CHIPS PRESET LOKASI KAMPUS UISI */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Pilih Cepat Area Kampus UISI:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {campusPresets.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset.value)}
+                      className={clsx(
+                        "text-xs px-3 py-1.5 rounded-full border transition font-medium",
+                        formData.location === preset.value
+                          ? "bg-primary text-white border-primary shadow-sm font-bold"
+                          : "bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary/50",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* FORM KETERANGAN LANJUTAN LOKASI */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                  <Building2 size={16} className="text-primary dark:text-blue-400" />
+                  Keterangan Lanjutan Lokasi (Detail Spesifik)
+                </label>
+                <input
+                  type="text"
+                  value={locationDetail}
+                  onChange={(e) => setLocationDetail(e.target.value)}
+                  className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200"
+                  placeholder="Contoh: Di dekat meja kasir kantin lantai 2 / di bawah bangku baris 3 Lab B / dekat tiang bendera parkiran"
+                />
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  Bantu penemu/pemilik mengenali posisi spesifik barang di dalam ruangan atau area kampus.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Deskripsi Detail
+                  Deskripsi Detail Barang
                 </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
-                  rows={4}
+                  rows={3}
                   className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 resize-none"
                   placeholder="Jelaskan secara detail mengenai barang yang hilang..."
                 ></textarea>
@@ -357,55 +663,78 @@ function ReportFormContent() {
                 </div>
               </div>
 
-              {/* Fitur Unggah Gambar Fungsional */}
+              {/* UNGGAH MULTI FOTO BARANG (WAJIB MINIMAL 1, MAKSIMAL 5) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Unggah Foto (Opsional)
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Unggah Foto Barang *{" "}
+                    <span className="text-xs text-primary dark:text-blue-400 font-normal">
+                      (Wajib Minimal 1 Foto, Maksimal 5)
+                    </span>
+                  </label>
+                  <span className="text-xs font-mono text-gray-400">
+                    {images.length}/5 Foto Dipilih
+                  </span>
+                </div>
+
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   ref={fileInputRef}
                   onChange={handleImageChange}
                   className="hidden"
                 />
 
-                {!imagePreview ? (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="mt-1 flex flex-col justify-center items-center px-6 pt-8 pb-10 border-2 border-gray-300 dark:border-gray-700/80 border-dashed rounded-xl bg-gray-50 dark:bg-[#0b1120]/50 hover:bg-gray-100 dark:hover:bg-[#0b1120] transition-colors cursor-pointer group"
-                  >
-                    <div className="w-12 h-12 bg-gray-200 dark:bg-gray-800 rounded-lg flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                      <UploadCloud className="h-6 w-6 text-gray-500 dark:text-gray-400" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Klik untuk mengunggah gambar
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      JPG, PNG atau WEBP (Maks. 5MB)
-                    </p>
-                  </div>
-                ) : (
-                  <div className="relative mt-1 border border-gray-300 dark:border-gray-700 rounded-xl p-2 bg-gray-50 dark:bg-[#0b1120] flex items-center gap-4">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                    <div className="flex-grow">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                        {image?.name}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={removeImage}
-                      className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
+                  {imagePreviews.map((previewUrl, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden aspect-square bg-gray-100 dark:bg-gray-900 shadow-sm"
                     >
-                      <X size={20} />
-                    </button>
-                  </div>
-                )}
+                      <img
+                        src={previewUrl}
+                        alt={`Preview ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        {idx === 0 ? "Utama" : `#${idx + 1}`}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeImageAt(idx)}
+                        className="absolute top-1 right-1 bg-red-600/90 text-white p-1 rounded-full opacity-90 hover:opacity-100 transition hover:scale-110"
+                        title="Hapus foto ini"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {images.length < 5 && (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className={clsx(
+                        "flex flex-col justify-center items-center border-2 border-dashed rounded-xl cursor-pointer transition-all aspect-square p-3 text-center group",
+                        images.length === 0
+                          ? "col-span-full py-8 bg-gray-50 dark:bg-[#0b1120]/50 border-gray-300 dark:border-gray-700 hover:border-primary"
+                          : "bg-gray-50 dark:bg-[#0b1120]/50 border-gray-300 dark:border-gray-700 hover:border-primary",
+                      )}
+                    >
+                      <UploadCloud className="h-6 w-6 text-gray-400 group-hover:scale-110 transition-transform group-hover:text-primary mb-1" />
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        {images.length === 0
+                          ? "Klik untuk mengunggah foto *"
+                          : "+ Tambah Foto"}
+                      </p>
+                      {images.length === 0 && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          JPG, PNG atau WEBP (Maks 5MB per foto)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="pt-8 border-t border-gray-100 dark:border-gray-800/80 flex justify-end gap-4">
@@ -482,8 +811,6 @@ function ReportFormContent() {
                     className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-gray-900 dark:text-gray-200 appearance-none"
                   >
                     <option value="">Pilih Kategori</option>
-
-                    {/* Render opsi kategori secara dinamis dari database */}
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
@@ -511,25 +838,93 @@ function ReportFormContent() {
                       type="date"
                       name="date"
                       value={formData.date}
+                      max={new Date().toISOString().split("T")[0]}
                       onChange={handleChange}
                       className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg pl-4 pr-10 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-gray-900 dark:text-gray-200"
                     />
                   </div>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
-                    Lokasi (Gedung/Ruangan){" "}
-                    <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-gray-900 dark:text-gray-200"
-                    placeholder="Contoh: Gedung A, Lantai 2, R. A201"
-                  />
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Lokasi (Gedung/Ruangan) <span className="text-danger">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleGetCurrentLocation}
+                      disabled={isFetchingGps}
+                      className="text-xs text-primary dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      {isFetchingGps ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Compass size={13} />
+                      )}
+                      <span>Lokasi Saya (GPS)</span>
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="location"
+                      value={formData.location}
+                      onChange={handleChange}
+                      className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg pl-10 pr-24 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-gray-900 dark:text-gray-200"
+                      placeholder="Contoh: Gedung A, Lantai 2, R. A201"
+                    />
+                    <MapPin
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={18}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsMapModalOpen(true)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary/10 dark:bg-blue-900/30 text-primary dark:text-blue-400 hover:bg-primary/20 text-xs font-bold px-2.5 py-1.5 rounded-md transition flex items-center gap-1 border border-primary/20"
+                    >
+                      <Maximize2 size={12} /> Peta
+                    </button>
+                  </div>
                 </div>
+              </div>
+
+              {/* CHIPS PRESET LOKASI TEMUAN */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                  Pilih Cepat Area Kampus UISI:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {campusPresets.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset.value)}
+                      className={clsx(
+                        "text-xs px-3 py-1.5 rounded-full border transition font-medium",
+                        formData.location === preset.value
+                          ? "bg-primary text-white border-primary shadow-sm font-bold"
+                          : "bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary/50",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* KETERANGAN LANJUTAN LOKASI TEMUAN */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
+                  <Building2 size={15} className="text-primary dark:text-blue-400" />
+                  Keterangan Lanjutan Lokasi (Detail Spesifik Posisi Barang)
+                </label>
+                <input
+                  type="text"
+                  value={locationDetail}
+                  onChange={(e) => setLocationDetail(e.target.value)}
+                  className="w-full bg-white dark:bg-[#0b1120] border border-gray-300 dark:border-gray-700/60 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none text-gray-900 dark:text-gray-200"
+                  placeholder="Contoh: Diserahkan ke Petugas Pos Satpam Utama / ditaruh di Meja Dosen Ruang A201"
+                />
               </div>
             </div>
 
@@ -553,53 +948,78 @@ function ReportFormContent() {
                   ></textarea>
                 </div>
 
+                {/* UNGGAH MULTI FOTO BARANG (TEMUAN) */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
-                    Unggah Foto Barang{" "}
-                    <span className="text-gray-400">(Opsional)</span>
-                  </label>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Unggah Foto Barang <span className="text-danger">*</span>{" "}
+                      <span className="text-[11px] text-primary dark:text-blue-400 font-normal">
+                        (Wajib Minimal 1 Foto, Maksimal 5)
+                      </span>
+                    </label>
+                    <span className="text-xs font-mono text-gray-400">
+                      {images.length}/5 Foto Dipilih
+                    </span>
+                  </div>
+
                   <input
                     type="file"
                     accept="image/*"
+                    multiple
                     ref={fileInputRef}
                     onChange={handleImageChange}
                     className="hidden"
                   />
 
-                  {!imagePreview ? (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="mt-1 flex flex-col justify-center items-center px-6 py-10 border-2 border-gray-300 dark:border-gray-700/80 border-dashed rounded-xl bg-white dark:bg-[#0b1120]/50 hover:bg-gray-50 dark:hover:bg-[#0b1120] transition-colors cursor-pointer group"
-                    >
-                      <ImageIcon className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-3 group-hover:scale-110 transition-transform group-hover:text-primary dark:group-hover:text-blue-400" />
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Klik untuk memilih file gambar
-                      </p>
-                      <p className="text-xs text-gray-500 font-mono">
-                        Format: JPG, PNG (Maks. 5MB)
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="relative mt-1 border border-gray-300 dark:border-gray-700 rounded-xl p-2 bg-white dark:bg-[#0b1120] flex items-center gap-4">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                      <div className="flex-grow">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                          {image?.name}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={removeImage}
-                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
+                    {imagePreviews.map((previewUrl, idx) => (
+                      <div
+                        key={idx}
+                        className="relative group border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden aspect-square bg-gray-100 dark:bg-gray-900 shadow-sm"
                       >
-                        <X size={20} />
-                      </button>
-                    </div>
-                  )}
+                        <img
+                          src={previewUrl}
+                          alt={`Preview ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          {idx === 0 ? "Utama" : `#${idx + 1}`}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeImageAt(idx)}
+                          className="absolute top-1 right-1 bg-red-600/90 text-white p-1 rounded-full opacity-90 hover:opacity-100 transition hover:scale-110"
+                          title="Hapus foto ini"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+
+                    {images.length < 5 && (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className={clsx(
+                          "flex flex-col justify-center items-center border-2 border-dashed rounded-xl cursor-pointer transition-all aspect-square p-3 text-center group",
+                          images.length === 0
+                            ? "col-span-full py-8 bg-white dark:bg-[#0b1120]/50 border-gray-300 dark:border-gray-700 hover:border-primary"
+                            : "bg-white dark:bg-[#0b1120]/50 border-gray-300 dark:border-gray-700 hover:border-primary",
+                        )}
+                      >
+                        <UploadCloud className="h-6 w-6 text-gray-400 group-hover:scale-110 transition-transform group-hover:text-primary mb-1" />
+                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          {images.length === 0
+                            ? "Klik untuk memilih file gambar *"
+                            : "+ Tambah Foto"}
+                        </p>
+                        {images.length === 0 && (
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Format: JPG, PNG (Maks. 5MB per foto)
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -624,6 +1044,154 @@ function ReportFormContent() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL INTERAKTIF MAP PICKER (REAL-TIME LEAFLET DRAGGABLE PIN MARKER) */}
+      {/* ===================================================================== */}
+      {isMapModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface dark:bg-[#151c2c] border border-gray-200 dark:border-gray-800 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
+            {/* Header Modal */}
+            <div className="p-5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/40">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary dark:text-blue-400 flex items-center justify-center font-bold">
+                  <Navigation size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                    Geser & Tentukan Titik Lokasi Peta (Grab Style)
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Klik atau **seret (drag & drop)** pin hijau langsung di peta.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMapModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content Map Canvas & Real-time Leaflet Container */}
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="relative w-full h-80 rounded-xl overflow-hidden border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-900 shadow-inner">
+                {/* Leaflet Dynamic Canvas Element */}
+                <div ref={mapContainerRef} className="w-full h-full z-10" />
+
+                {/* Overlay Grab-Style D-Pad Directional Navigators (Atas, Bawah, Kiri, Kanan) */}
+                <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-20">
+                  {/* Top Arrow */}
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => shiftLocation(0.0006, 0)}
+                      className="pointer-events-auto bg-white/90 dark:bg-gray-900/90 text-gray-800 dark:text-white p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-primary hover:text-white transition active:scale-90"
+                      title="Geser Ke Utara (Atas)"
+                    >
+                      <ChevronUp size={20} />
+                    </button>
+                  </div>
+
+                  {/* Middle Row (Left, Center Label, Right) */}
+                  <div className="flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => shiftLocation(0, -0.0006)}
+                      className="pointer-events-auto bg-white/90 dark:bg-gray-900/90 text-gray-800 dark:text-white p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-primary hover:text-white transition active:scale-90"
+                      title="Geser Ke Barat (Kiri)"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+
+                    <div className="bg-primary/90 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/20 backdrop-blur-md flex items-center gap-1.5 pointer-events-auto">
+                      <Move size={13} className="animate-pulse" />
+                      <span>Seret (Drag) Pin Hijau atau Klik Peta</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => shiftLocation(0, 0.0006)}
+                      className="pointer-events-auto bg-white/90 dark:bg-gray-900/90 text-gray-800 dark:text-white p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-primary hover:text-white transition active:scale-90"
+                      title="Geser Ke Timur (Kanan)"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+
+                  {/* Bottom Arrow */}
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => shiftLocation(-0.0006, 0)}
+                      className="pointer-events-auto bg-white/90 dark:bg-gray-900/90 text-gray-800 dark:text-white p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-primary hover:text-white transition active:scale-90"
+                      title="Geser Ke Selatan (Bawah)"
+                    >
+                      <ChevronDown size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Badge Overlay Coordinats */}
+                <div className="absolute top-3 left-3 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono font-semibold text-gray-900 dark:text-gray-200 flex items-center gap-1.5 shadow-md z-20">
+                  <Crosshair size={13} className="text-primary dark:text-blue-400" />
+                  <span>
+                    {selectedCoords.lat.toFixed(4)}, {selectedCoords.lng.toFixed(4)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isFetchingGps}
+                  className="w-full sm:w-auto bg-white dark:bg-gray-800 hover:bg-gray-100 text-gray-800 dark:text-gray-200 text-xs font-semibold px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 transition flex items-center justify-center gap-2"
+                >
+                  {isFetchingGps ? (
+                    <Loader2 size={14} className="animate-spin text-primary" />
+                  ) : (
+                    <Compass size={14} className="text-primary dark:text-blue-400" />
+                  )}
+                  Reset ke Lokasi GPS Saya
+                </button>
+
+                <div className="text-right text-xs text-gray-500 dark:text-gray-400 font-medium">
+                  {mapAddressPreview || "Kampus A UISI, Gresik"}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="p-5 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 bg-gray-50 dark:bg-gray-900/40">
+              <button
+                type="button"
+                onClick={() => setIsMapModalOpen(false)}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (mapAddressPreview) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      location: mapAddressPreview,
+                    }));
+                  }
+                  setIsMapModalOpen(false);
+                }}
+                className="px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-blue-800 transition shadow-md flex items-center gap-2"
+              >
+                <Check size={16} /> Gunakan Lokasi Ini
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
