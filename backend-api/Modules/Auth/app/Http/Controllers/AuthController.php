@@ -282,6 +282,30 @@ class AuthController extends Controller
         ], 200);
     }
 
+    public function updateAvatar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('avatar')) {
+            $uploadedFileUrl = cloudinary()->upload($request->file('avatar')->getRealPath(), [
+                'folder' => 'lost_found_uisi/avatars'
+            ])->getSecurePath();
+
+            $user->avatar_url = $uploadedFileUrl;
+            $user->save();
+        }
+
+        return response()->json([
+            'message' => 'Foto profil berhasil diperbarui.',
+            'avatar_url' => $user->avatar_url,
+            'user' => $user
+        ], 200);
+    }
+
     // kode kode dibawah hasil generate dari php laravel nya jadi jika kita frontend nya menggunakan .blade maka 
     // logic logic yang diatas itu diganti dibawah tapi kita menggunakan FE selain .blade jadi ini hanya deadcode saja 
     // /**

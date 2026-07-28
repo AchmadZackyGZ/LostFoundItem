@@ -5,26 +5,50 @@ namespace Modules\Item\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Modules\Item\Models\Claim;
+use Modules\Auth\Contracts\AuthClientInterface;
 use Modules\Notification\Contracts\NotificationServiceInterface;
 
 class AdminClaimController extends Controller
 {
     private NotificationServiceInterface $notificationService;
+    private AuthClientInterface $authClient;
 
-    public function __construct(NotificationServiceInterface $notificationService)
-    {
+    public function __construct(
+        NotificationServiceInterface $notificationService,
+        AuthClientInterface $authClient
+    ) {
         $this->notificationService = $notificationService;
+        $this->authClient = $authClient;
     }
 
     // 1. LIHAT SEMUA KLAIM (Hanya untuk Admin)
     public function index(): JsonResponse
     {
-        // Tarik semua data klaim, urutkan dari yang terbaru, sertakan data barang dan usernya
-        $claims = Claim::with(['item', 'user'])->latest()->get();
+        $claims = Claim::with(['item'])->latest()->get();
+
+        $mappedClaims = $claims->map(function ($claim) {
+            $user = $this->authClient->getUserById($claim->user_id);
+            return [
+                'id' => $claim->id,
+                'item_id' => $claim->item_id,
+                'user_id' => $claim->user_id,
+                'proof_description' => $claim->proof_description,
+                'proof_image_path' => $claim->proof_image_path,
+                'status' => $claim->status,
+                'created_at' => $claim->created_at,
+                'item' => $claim->item,
+                'user' => [
+                    'id' => $user['id'] ?? $claim->user_id,
+                    'name' => $user['name'] ?? 'Pengguna UISI',
+                    'email' => $user['email'] ?? '-',
+                    'avatar_url' => $user['avatar_url'] ?? null,
+                ]
+            ];
+        });
 
         return response()->json([
             'message' => 'Berhasil mengambil seluruh data klaim.',
-            'data' => $claims
+            'data' => $mappedClaims
         ], 200);
     }
 
@@ -41,14 +65,14 @@ class AdminClaimController extends Controller
         $claim->update(['status' => 'approved']);
 
         // Ubah status barang utama jadi 'completed' (Selesai/Sudah dikembalikan)
-        $claim->item->update(['status' => 'completed']);
-
-        // Kirim Notifikasi via Contract (Modular Monolith)
         if ($claim->item) {
+            $claim->item->update(['status' => 'completed']);
+
+            // Kirim Notifikasi via Contract (Modular Monolith)
             $this->notificationService->send(
                 $claim->user_id,
                 'Klaim Barang Disetujui',
-                "Klaim anda untuk {$claim->item->title} telah diverifikasi dan disetujui oleh admin.",
+                "Klaim Anda untuk '{$claim->item->title}' telah diverifikasi dan disetujui oleh admin.",
                 'claim',
                 "/items/{$claim->item_id}"
             );
@@ -73,14 +97,14 @@ class AdminClaimController extends Controller
         $claim->update(['status' => 'rejected']);
 
         // KEMBALIKAN status barang menjadi 'active' agar bisa diklaim oleh orang lain
-        $claim->item->update(['status' => 'active']);
-
-        // Kirim Notifikasi via Contract (Modular Monolith)
         if ($claim->item) {
+            $claim->item->update(['status' => 'active']);
+
+            // Kirim Notifikasi via Contract (Modular Monolith)
             $this->notificationService->send(
                 $claim->user_id,
                 'Klaim Barang Ditolak',
-                "Klaim anda untuk {$claim->item->title} telah ditolak oleh admin.",
+                "Klaim Anda untuk '{$claim->item->title}' telah ditolak oleh admin.",
                 'claim',
                 "/items/{$claim->item_id}"
             );

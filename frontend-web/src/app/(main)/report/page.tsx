@@ -28,9 +28,12 @@ import clsx from "clsx";
 import api from "@/lib/axios";
 import axios from "axios";
 
+import { useAuthStore } from "@/store/useAuthStore";
+
 function ReportFormContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user } = useAuthStore();
   const tabQuery = searchParams.get("tab");
   const reportType = tabQuery === "temuan" ? "temuan" : "kehilangan";
 
@@ -38,6 +41,16 @@ function ReportFormContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 🚨 PROTEKSI AKUN ADMIN: Admin tidak boleh membuat laporan barang
+  useEffect(() => {
+    if (user && user.role === "admin") {
+      const msg = "admin tidak bisa membuat laporan barang kehilangan dan laporan menemukan barang";
+      setErrorMsg(msg);
+      alert(msg);
+      router.push("/admin");
+    }
+  }, [user, router]);
 
   const [formData, setFormData] = useState({
     title: "",

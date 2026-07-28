@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   User as UserIcon,
   Settings,
@@ -23,10 +23,12 @@ import {
   X,
   Smartphone,
   ShieldCheck,
+  Camera,
 } from "lucide-react";
 import clsx from "clsx";
 import api from "@/lib/axios";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface UserProfile {
   id: string;
@@ -37,6 +39,7 @@ interface UserProfile {
   phone_verified_at?: string;
   role: string;
   nim?: string;
+  avatar_url?: string;
 }
 
 export default function ProfilePage() {
@@ -51,6 +54,10 @@ export default function ProfilePage() {
   const [completedCount, setCompletedCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Form States - Avatar Upload
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
   // Form States - Information
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState({
@@ -59,6 +66,51 @@ export default function ProfilePage() {
     phone: "",
   });
   const [isSavingInfo, setIsSavingInfo] = useState(false);
+
+  // Handle Avatar Change & Upload
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedback({
+        type: "error",
+        message: "Ukuran foto profil maksimal 5MB.",
+      });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setFeedback(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+
+      const res = await api.post("/api/auth/profile/avatar", formData, {
+        headers: { "Content-Type": undefined },
+      });
+
+      const newAvatarUrl = res.data.avatar_url;
+      setUser((prev) => (prev ? { ...prev, avatar_url: newAvatarUrl } : null));
+
+      // Refresh Zustand auth store so TopNav updates instantly
+      useAuthStore.getState().checkAuth();
+
+      setFeedback({
+        type: "success",
+        message: "Foto profil publik Anda berhasil diunggah!",
+      });
+    } catch (err) {
+      console.error("Gagal mengunggah foto profil:", err);
+      setFeedback({
+        type: "error",
+        message: "Terjadi kesalahan saat mengunggah foto profil.",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Form States - Phone OTP Binding
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
@@ -344,19 +396,39 @@ export default function ProfilePage() {
         <div className="lg:col-span-1 space-y-6">
           {/* Main Profile Card */}
           <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-center shadow-sm">
-            <div className="w-24 h-24 bg-primary/10 dark:bg-blue-900/30 rounded-full mx-auto flex items-center justify-center mb-4 relative border-2 border-primary/20 dark:border-blue-500/30">
-              <span className="text-3xl font-bold text-primary dark:text-blue-400">
-                {getInitials(user?.name)}
-              </span>
+            <div className="w-24 h-24 bg-primary/10 dark:bg-blue-900/30 rounded-full mx-auto flex items-center justify-center mb-4 relative border-2 border-primary/20 dark:border-blue-500/30 overflow-hidden">
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.name}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span className="text-3xl font-bold text-primary dark:text-blue-400">
+                  {getInitials(user?.name)}
+                </span>
+              )}
+
+              <input
+                type="file"
+                ref={avatarInputRef}
+                onChange={handleAvatarChange}
+                accept="image/*"
+                className="hidden"
+              />
+
               <button
-                onClick={() => {
-                  setActiveTab("info");
-                  setIsEditingInfo(true);
-                }}
-                className="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full shadow-md hover:bg-blue-800 transition"
-                title="Edit Profil"
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="absolute bottom-0 right-0 bg-primary hover:bg-blue-700 text-white p-2 rounded-full shadow-lg transition-transform hover:scale-110 z-10"
+                title="Unggah Foto Profil Publik"
               >
-                <Edit3 size={14} />
+                {isUploadingAvatar ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Camera size={14} />
+                )}
               </button>
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">

@@ -33,6 +33,7 @@ class User extends Authenticatable
         'department',
         'phone',
         'phone_verified_at',
+        'avatar_url',
     ];
 
     /**
