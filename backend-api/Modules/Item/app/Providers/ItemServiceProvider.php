@@ -17,6 +17,17 @@ class ItemServiceProvider extends ModuleServiceProvider
      */
     protected string $nameLower = 'item';
 
+    public function register(): void
+    {
+        $this->app->register(RouteServiceProvider::class);
+
+        // 🚨 BINDING INTERFACE KE SERVICE (Tambahkan baris ini)
+        $this->app->bind(
+            \Modules\Item\Contracts\ItemServiceInterface::class,
+            \Modules\Item\Services\ItemService::class
+        );
+    }
+
     /**
      * Command classes to register.
      *

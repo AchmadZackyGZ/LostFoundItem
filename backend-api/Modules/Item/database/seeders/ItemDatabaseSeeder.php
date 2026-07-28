@@ -13,13 +13,15 @@ class ItemDatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        echo "\n---> HALO BOSQUE, SEEDER KATEGORI JALAN NIH! <---\n"; // Tambahkan ini
         $categories = [
-            'Barang Elektronik',
-            'Dokumen & Surat',
-            'Dompet & Uang',
-            'Kunci',
-            'Pakaian & Aksesoris',
-            'Lainnya'
+            'Elektronik',           // Akan mendapat ID 1
+            'Dokumen',              // Akan mendapat ID 2
+            'Kendaraan',            // Akan mendapat ID 3
+            'Lainnya',              // Akan mendapat ID 4
+            'Dompet & Uang',        // Akan mendapat ID 5
+            'Kunci',                // Akan mendapat ID 6
+            'Pakaian & Aksesoris'   // Akan mendapat ID 7
         ];
 
         // Looping untuk insert langsung dari file Induk ini

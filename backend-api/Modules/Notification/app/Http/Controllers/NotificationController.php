@@ -2,55 +2,125 @@
 
 namespace Modules\Notification\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+/* use Illuminate\Routing\Controller; */
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\JsonResponse;
+use Modules\Notification\Models\AppNotification;
+use App\Http\Controllers\Controller;
+use App\Models\User;
 
 class NotificationController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request): JsonResponse
     {
-        return view('notification::index');
+        $user = Auth::user();
+
+        $perPage = $request->input('per_page', 15);
+        $notifications = $user->notifications()->paginate($perPage);
+
+        return response()->json([
+            'success' => true,
+            'data' => $notifications->map(function ($notif) {
+                return [
+                    'id' => $notif->id,
+                    'data' => $notif->data,
+                    'read_at' => $notif->read_at,
+                    'created_at' => $notif->created_at->toISOString(),
+                ];
+            }),
+            'meta' => [
+                'unread_count' => $user->unreadNotifications->count(),
+                'pagination' => [
+                    'total' => $notifications->total(),
+                    'per_page' => $notifications->perPage(),
+                    'current_page' => $notifications->currentPage(),
+                ],
+            ],
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    /* Changed by: Zacky
+    /* public function index(Request $request): JsonResponse */
+    /* { */
+    /*     $notifications = AppNotification::where('user_id', $request->user()->id) */
+    /*         ->latest() */
+    /*         ->get(); */
+    /**/
+    /*     return response()->json([ */
+    /*         'message' => 'Berhasil mengambil notifikasi.', */
+    /*         'data' => $notifications */
+    /*     ], 200); */
+
+
+    // Menandai satu notifikasi sebagai sudah dibaca
+    public function markAsRead(string $id)
     {
-        return view('notification::create');
+        /** @var User $user */
+        $user = Auth::user();
+        $notification = $user->notifications()->find($id);
+
+        if (!$notification) {
+            return response()->json(['success' => false, 'message' => 'Notifikasi tidak ditemukan'], 404);
+        }
+
+        $notification->markAsRead();
+        return response()->json(['success' => true, 'message' => 'Notifikasi ditandai telah dibaca']);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
+    /* Changed by: Zacky
+    /* public function markAsRead(Request $request, string $id): JsonResponse */
+    /* { */
+    /*     $notification = AppNotification::where('id', $id) */
+    /*         ->where('user_id', $request->user()->id) */
+    /*         ->first(); */
+    /**/
+    /*     if (!$notification) { */
+    /*         return response()->json(['message' => 'Notifikasi tidak ditemukan'], 404); */
+    /*     } */
+    /**/
+    /*     $notification->update(['is_read' => true]); */
+    /**/
+    /*     return response()->json([ */
+    /*         'message' => 'Notifikasi ditandai telah dibaca.', */
+    /*         'data' => $notification */
+    /*     ], 200); */
+    /* } */
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
+    // Menandai SEMUA notifikasi sebagai sudah dibaca
+    public function markAllAsRead()
     {
-        return view('notification::show');
+        /** @var User $user */
+        $user = Auth::user();
+        $user->unreadNotifications->markAsRead();
+        return response()->json(['success' => true, 'message' => 'Semua notifikasi ditandai telah dibaca']);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
+    // Mendapatkan jumlah notifikasi yang belum dibaca (untuk badge)
+    public function unreadCount()
     {
-        return view('notification::edit');
+        /** @var User $user */
+        $user = Auth::user();
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'count' => $user->unreadNotifications->count(),
+            ],
+        ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
+    // 3. TANDAI SEMUA NOTIFIKASI SUDAH DIBACA
+    public function markAllAsRead(Request $request): JsonResponse
+    {
+        AppNotification::where('user_id', $request->user()->id)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
+        return response()->json([
+            'message' => 'Semua notifikasi ditandai telah dibaca.'
+        ], 200);
+    }
 }
