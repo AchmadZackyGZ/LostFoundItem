@@ -28,6 +28,13 @@ class DiscussionController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
+        if ($request->user()->isSuspended()) {
+            $until = $request->user()->suspended_until ? $request->user()->suspended_until->translatedFormat('d F Y H:i') . ' WIB' : 'Permanen';
+            return response()->json([
+                'message' => "Akun Anda sedang ditangguhkan (Suspend) sampai {$until}.\nAlasan: " . ($request->user()->suspend_reason ?? 'Pelanggaran ketentuan obrolan'),
+            ], 403);
+        }
+
         $userId = $request->user()->id;
 
         // Simpan komentar

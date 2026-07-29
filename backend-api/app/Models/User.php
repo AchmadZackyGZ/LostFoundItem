@@ -29,6 +29,8 @@ class User extends Authenticatable
         'phone',
         'phone_verified_at',
         'avatar_url',
+        'suspended_until',
+        'suspend_reason',
     ];
 
     /**
@@ -51,7 +53,16 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
+            'suspended_until' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Check if user is currently suspended
+     */
+    public function isSuspended(): bool
+    {
+        return $this->suspended_until && $this->suspended_until->isFuture();
     }
 }

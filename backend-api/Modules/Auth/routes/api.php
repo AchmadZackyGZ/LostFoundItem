@@ -27,6 +27,8 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+Route::middleware('auth:sanctum')->get('/v1/users/{id}', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'getUserProfile']);
+
 /*
 |--------------------------------------------------------------------------
 | API ROLE ADMIN USER MANAGEMENT
@@ -35,5 +37,6 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
     Route::get('/users', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'index']);
     Route::put('/users/{id}/verify', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'verifyUser']);
+    Route::put('/users/{id}/suspend', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'suspendUser']);
     Route::delete('/users/{id}', [\Modules\Auth\Http\Controllers\AdminUserController::class, 'destroy']);
 });

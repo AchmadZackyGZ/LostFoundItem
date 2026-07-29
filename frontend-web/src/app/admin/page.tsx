@@ -42,6 +42,9 @@ import {
   Cpu,
   Wifi,
   Menu,
+  ShieldAlert,
+  Ban,
+  Clock,
 } from "lucide-react";
 import clsx from "clsx";
 import api from "@/lib/axios";
@@ -101,6 +104,9 @@ interface AdminUser {
   avatar_url?: string;
   is_email_verified: boolean;
   is_phone_verified: boolean;
+  is_suspended?: boolean;
+  suspended_until?: string | null;
+  suspend_reason?: string | null;
   reported_items_count: number;
   submitted_claims_count: number;
   created_at: string;
@@ -153,6 +159,33 @@ export default function AdminDashboardPage() {
   const [selectedProof, setSelectedProof] = useState<RealClaim | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isSystemStatusOpen, setIsSystemStatusOpen] = useState(false);
+
+  // --- SUSPEND MODAL STATE ADMIN ---
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [selectedSuspendUser, setSelectedSuspendUser] = useState<AdminUser | null>(null);
+  const [suspendDays, setSuspendDays] = useState(7);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [isSuspending, setIsSuspending] = useState(false);
+
+  const handleExecuteSuspend = async (days: number, reason: string) => {
+    if (!selectedSuspendUser) return;
+    setIsSuspending(true);
+
+    try {
+      const res = await api.put(`/api/v1/admin/users/${selectedSuspendUser.id}/suspend`, {
+        days,
+        suspend_reason: reason,
+      });
+
+      alert(res.data.message || "Status penangguhan pengguna berhasil diperbarui.");
+      setIsSuspendModalOpen(false);
+      await fetchAdminUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Gagal memperbarui status penangguhan.");
+    } finally {
+      setIsSuspending(false);
+    }
+  };
 
   // Admin Settings Form State
   const [passwordForm, setPasswordForm] = useState({
@@ -281,49 +314,142 @@ export default function AdminDashboardPage() {
     verifyAdminAccess();
   }, [checkAuth, router]);
 
-  // --- HANDLER EXPORT REPORT CSV ---
-  const handleExportReportCSV = () => {
+  // --- HANDLER EXPORT LAPORAN EXCEL RAPI & TERSTRUKTUR (.XLS / .XLSX) ---
+  const handleExportReportExcel = () => {
     if (inventoryItems.length === 0) {
       alert("Belum ada data inventaris untuk dieksport.");
       return;
     }
 
-    const headers = [
-      "ID Laporan",
-      "Judul Barang",
-      "Kategori",
-      "Tipe",
-      "Lokasi",
-      "Status System",
-      "Tanggal Dibuat",
-      "Nama Pelapor",
-    ];
+    const currentDate = new Date().toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
 
-    const rows = inventoryItems.map((item) => [
-      item.id,
-      `"${item.title.replace(/"/g, '""')}"`,
-      `"${item.category}"`,
-      item.type,
-      `"${item.location.replace(/"/g, '""')}"`,
-      item.status,
-      item.created_at || item.date,
-      `"${item.reporter?.name || "Anonim"}"`,
-    ]);
+    const currentTime = new Date().toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    // Baris Header Tabel Excel dengan Styling Profesional Dark Header & Clean Borders
+    const tableHeader = `
+      <tr style="background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 12px; text-align: center;">
+        <th style="padding: 12px 8px; border: 1px solid #334155; width: 40px;">No</th>
+        <th style="padding: 12px 10px; border: 1px solid #334155; width: 140px;">ID Laporan</th>
+        <th style="padding: 12px 15px; border: 1px solid #334155; width: 220px;">Judul Barang</th>
+        <th style="padding: 12px 10px; border: 1px solid #334155; width: 120px;">Kategori</th>
+        <th style="padding: 12px 10px; border: 1px solid #334155; width: 110px;">Tipe Laporan</th>
+        <th style="padding: 12px 15px; border: 1px solid #334155; width: 250px;">Lokasi Kejadian</th>
+        <th style="padding: 12px 10px; border: 1px solid #334155; width: 160px;">Status System</th>
+        <th style="padding: 12px 12px; border: 1px solid #334155; width: 140px;">Tanggal Dibuat</th>
+        <th style="padding: 12px 15px; border: 1px solid #334155; width: 180px;">Nama Pelapor</th>
+      </tr>
+    `;
 
-    const encodedUri = encodeURI(csvContent);
+    // Data Baris Tabel
+    const tableRows = inventoryItems
+      .map((item, index) => {
+        const bg = index % 2 === 0 ? "#ffffff" : "#f8fafc";
+        const typeBadge = item.type === "lost" ? "KEHILANGAN" : "TEMUAN";
+        const typeColor = item.type === "lost" ? "#dc2626" : "#2563eb";
+        const statusBadge =
+          item.status === "active"
+            ? "Dipublikasikan (Aktif)"
+            : item.status === "pending"
+            ? "Pending Validasi"
+            : item.status === "completed"
+            ? "Selesai Dikembalikan"
+            : item.status.toUpperCase();
+
+        const formattedDate = formatDate(item.created_at || item.date);
+
+        return `
+          <tr style="background-color: ${bg}; font-size: 11px; text-align: left; vertical-align: middle;">
+            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${index + 1}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; font-family: Consolas, monospace; color: #475569;">#${item.id}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; font-weight: bold; color: #0f172a;">${item.title}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; color: #334155;">${item.category}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; font-weight: bold; color: ${typeColor}; text-align: center;">${typeBadge}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; color: #334155;">${item.location}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; font-weight: bold; color: #0f172a;">${statusBadge}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">${formattedDate}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; font-weight: bold; color: #1e293b;">${item.reporter?.name || "Anonim"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    // Template Dokumen Spreadsheet HTML Microsoft Excel
+    const excelTemplate = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <!--[if gte mso 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>Laporan Inventaris UISI</x:Name>
+                  <x:WorksheetOptions>
+                    <x:DisplayGridlines/>
+                  </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+          <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { mso-number-format:"\\@"; }
+          </style>
+        </head>
+        <body style="padding: 20px;">
+          <table style="margin-bottom: 20px;">
+            <tr>
+              <td colspan="9" style="font-size: 18px; font-weight: bold; color: #0f172a; padding-bottom: 5px;">
+                LAPORAN INVENTARIS BARANG LOST & FOUND
+              </td>
+            </tr>
+            <tr>
+              <td colspan="9" style="font-size: 13px; font-weight: bold; color: #2563eb; padding-bottom: 10px;">
+                UNIVERSITAS INTERNASIONAL SEMEN INDONESIA (UISI)
+              </td>
+            </tr>
+            <tr>
+              <td colspan="9" style="font-size: 11px; color: #64748b; padding-bottom: 15px;">
+                Dicetak Pada: <b>${currentDate} jam ${currentTime} WIB</b> | Total Rekapitulasi: <b>${inventoryItems.length} Laporan Barang</b>
+              </td>
+            </tr>
+          </table>
+
+          <table>
+            <thead>
+              ${tableHeader}
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    // Buat Blob dengan UTF-8 BOM '\\uFEFF' agar Excel membaca karakter & kolom tanpa berantakan
+    const blob = new Blob(["\uFEFF", excelTemplate], {
+      type: "application/vnd.ms-excel;charset=utf-8",
+    });
+
+    const fileName = `Laporan_Inventaris_LostFound_UISI_${new Date().toISOString().slice(0, 10)}.xls`;
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `Laporan_Inventaris_LostFound_UISI_${new Date().toISOString().slice(0, 10)}.csv`,
-    );
+    link.href = url;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // --- HANDLER APPROVE KLAIM ---
@@ -533,6 +659,19 @@ export default function AdminDashboardPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const formatSuspendTime = (untilStr?: string | null) => {
+    if (!untilStr) return "Permanen (Selamanya)";
+    const d = new Date(untilStr);
+    if (isNaN(d.getTime())) return "Permanen";
+    if (d.getFullYear() > 2090) return "Permanen (Selamanya)";
+
+    return `s/d ${d.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })} ${d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB`;
   };
 
   const formatDateTime = (dateString: string) => {
@@ -827,10 +966,11 @@ export default function AdminDashboardPage() {
               <Calendar size={14} /> Last 30 Days
             </button>
             <button
-              onClick={handleExportReportCSV}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-blue-600/30"
+              onClick={handleExportReportExcel}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-600/30"
+              title="Unduh Laporan Inventaris Excel Rapi (.xls)"
             >
-              <Download size={14} /> Export Report
+              <Download size={14} /> Export Excel Rapi
             </button>
           </div>
         </div>
@@ -1053,37 +1193,85 @@ export default function AdminDashboardPage() {
                       Belum ada pengguna terdaftar.
                     </div>
                   ) : (
-                    usersList.slice(0, 4).map((u) => {
-                      const isSuspended = userFlags[u.id] === "suspended";
+                    [...usersList]
+                      .sort(
+                        (a, b) =>
+                          (b.is_suspended ? 1 : 0) - (a.is_suspended ? 1 : 0),
+                      )
+                      .slice(0, 5)
+                      .map((u) => {
+                        const isSuspended =
+                          u.is_suspended || userFlags[u.id] === "suspended";
 
-                      return (
-                        <div
-                          key={u.id}
-                          className="p-3.5 bg-[#090f1d] border border-gray-800 rounded-xl flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-white mb-0.5 truncate">
-                              {u.name}
-                            </h4>
-                            <p className="text-[11px] text-gray-400 truncate">
-                              {u.department} ({u.reported_items_count} laporan)
-                            </p>
-                          </div>
-
-                          <button
-                            onClick={() => handleToggleUserFlag(u.id)}
+                        return (
+                          <div
+                            key={u.id}
                             className={clsx(
-                              "px-3 py-1.5 rounded-lg text-xs font-semibold transition border flex-shrink-0",
+                              "p-3.5 border rounded-xl flex items-start justify-between gap-3 transition",
                               isSuspended
-                                ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                : "bg-emerald-500/10 hover:bg-red-500/10 text-emerald-400 hover:text-red-400 border-emerald-500/30 hover:border-red-500/40",
+                                ? "bg-red-950/30 border-red-500/40 shadow-sm"
+                                : "bg-[#090f1d] border-gray-800",
                             )}
                           >
-                            {isSuspended ? "Suspended" : "Aktif"}
-                          </button>
-                        </div>
-                      );
-                    })
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-bold text-white mb-0.5 truncate flex items-center gap-1.5">
+                                {u.name}
+                                {isSuspended && (
+                                  <span className="text-[9px] bg-red-500/20 text-red-300 border border-red-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                                    SUSPEND
+                                  </span>
+                                )}
+                              </h4>
+                              <p className="text-[11px] text-gray-400 truncate">
+                                {u.department} ({u.reported_items_count} laporan)
+                              </p>
+
+                              {/* WAKTU SUSPEND & ALASAN */}
+                              {isSuspended && (
+                                <div className="mt-2 pt-2 border-t border-red-500/20 text-[10px] space-y-1">
+                                  <div className="flex items-center gap-1 text-red-300 font-bold">
+                                    <Clock size={11} className="text-red-400" />
+                                    <span>Suspend: {formatSuspendTime(u.suspended_until)}</span>
+                                  </div>
+                                  {u.suspend_reason && (
+                                    <div
+                                      className="text-gray-400 truncate max-w-[190px]"
+                                      title={u.suspend_reason}
+                                    >
+                                      Alasan: {u.suspend_reason}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setSelectedSuspendUser(u);
+                                setSuspendReason(
+                                  u.suspend_reason ||
+                                    "Berkata kotor dan menyebarkan informasi bohong di diskusi",
+                                );
+                                setIsSuspendModalOpen(true);
+                              }}
+                              className={clsx(
+                                "px-3 py-1.5 rounded-lg text-xs font-bold transition border flex-shrink-0 flex items-center gap-1 shadow-sm mt-0.5",
+                                isSuspended
+                                  ? "bg-red-600 hover:bg-red-500 text-white border-red-500/50 shadow-red-600/30"
+                                  : "bg-emerald-500/10 hover:bg-red-500/20 text-emerald-400 hover:text-red-400 border-emerald-500/30 hover:border-red-500/40",
+                              )}
+                            >
+                              {isSuspended ? (
+                                <>
+                                  <Ban size={12} /> Ditangguhkan
+                                </>
+                              ) : (
+                                "Aktif"
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })
                   )}
                 </div>
               </div>
@@ -1320,18 +1508,27 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
 
-              <button
-                onClick={fetchAdminInventory}
-                disabled={isFetchingInventory}
-                className="bg-[#131c31] hover:bg-[#1a2642] text-gray-300 border border-gray-700/60 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
-              >
-                {isFetchingInventory ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={14} />
-                )}
-                Refresh Inventaris
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportReportExcel}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-md"
+                  title="Unduh Rekap Laporan Inventaris (.xls)"
+                >
+                  <Download size={14} /> Export Excel Rapi
+                </button>
+                <button
+                  onClick={fetchAdminInventory}
+                  disabled={isFetchingInventory}
+                  className="bg-[#131c31] hover:bg-[#1a2642] text-gray-300 border border-gray-700/60 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+                >
+                  {isFetchingInventory ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={14} />
+                  )}
+                  Refresh Inventaris
+                </button>
+              </div>
             </div>
 
             {/* Filter & Search Bar Controls */}
@@ -1803,6 +2000,32 @@ export default function AdminDashboardPage() {
                                 </button>
                               )}
 
+                              {/* Suspend / Unsuspend Button */}
+                              <button
+                                onClick={() => {
+                                  setSelectedSuspendUser(u);
+                                  setSuspendReason(
+                                    u.suspend_reason ||
+                                      "Berkata kotor dan menyebarkan informasi bohong di diskusi",
+                                  );
+                                  setIsSuspendModalOpen(true);
+                                }}
+                                className={clsx(
+                                  "font-bold px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-1 shadow-sm border",
+                                  u.is_suspended
+                                    ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/30"
+                                    : "bg-red-600/20 hover:bg-red-600 border-red-500/40 text-red-400 hover:text-white",
+                                )}
+                                title={
+                                  u.is_suspended
+                                    ? "Cabut Penangguhan Akun"
+                                    : "Suspend Akun Mahasiswa"
+                                }
+                              >
+                                <ShieldAlert size={13} />
+                                {u.is_suspended ? "Unsuspend" : "Suspend"}
+                              </button>
+
                               {/* Delete User Button */}
                               <button
                                 onClick={() => handleDeleteUserAccount(u)}
@@ -2084,10 +2307,11 @@ export default function AdminDashboardPage() {
                       <RefreshCw size={14} /> Clear Cache System
                     </button>
                     <button
-                      onClick={handleExportReportCSV}
-                      className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-md"
+                      onClick={handleExportReportExcel}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-md"
+                      title="Unduh Rekap Inventaris Format Excel Rapi (.xls)"
                     >
-                      <Download size={14} /> Export Backup Inventaris
+                      <Download size={14} /> Export Backup Inventaris Excel
                     </button>
                   </div>
                 </div>
@@ -2299,6 +2523,141 @@ export default function AdminDashboardPage() {
               alt="Perbesar Gambar"
               className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
             />
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* 🚫 MODAL ADMIN SUSPEND AKUN MAHASISWA */}
+      {/* ================================================================= */}
+      {isSuspendModalOpen && selectedSuspendUser && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0d1527] border-2 border-red-500/50 rounded-2xl max-w-md w-full p-6 text-white shadow-[0_20px_50px_rgba(239,68,68,0.35)] animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-500 border border-red-500/40 flex items-center justify-center font-bold">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    Suspend Akun Mahasiswa
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Moderasi & Penangguhan Akun
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSuspendModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              {/* User Info Header */}
+              <div className="bg-gray-900/80 p-3.5 rounded-xl border border-gray-800 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                  {selectedSuspendUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-sm text-white truncate">
+                    {selectedSuspendUser.name}
+                  </h4>
+                  <p className="text-gray-400 text-[11px] font-mono">
+                    NIM: {selectedSuspendUser.nim} • {selectedSuspendUser.department}
+                  </p>
+                  <p className="text-gray-400 text-[11px] truncate">
+                    {selectedSuspendUser.email}
+                  </p>
+                </div>
+              </div>
+
+              {selectedSuspendUser.is_suspended ? (
+                <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">
+                  <p className="font-bold mb-1 flex items-center gap-1.5 text-xs text-red-400">
+                    <Ban size={15} /> Status Akun Saat Ini: DITANGGUHKAN (SUSPEND)
+                  </p>
+                  <p className="text-[11px] text-gray-300">
+                    Alasan: {selectedSuspendUser.suspend_reason || "Pelanggaran aturan"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Durasi Suspend */}
+                  <div>
+                    <label className="block text-gray-300 font-bold mb-1.5">
+                      Durasi Penangguhan (Suspend):
+                    </label>
+                    <select
+                      value={suspendDays}
+                      onChange={(e) => setSuspendDays(Number(e.target.value))}
+                      className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-3.5 py-2.5 text-xs focus:ring-2 focus:ring-red-500 outline-none"
+                    >
+                      <option value={1}>1 Hari</option>
+                      <option value={3}>3 Hari</option>
+                      <option value={7}>7 Hari (1 Minggu - Rekomendasi)</option>
+                      <option value={30}>30 Hari (1 Bulan)</option>
+                      <option value={36500}>Permanen / Selamanya</option>
+                    </select>
+                  </div>
+
+                  {/* Alasan Suspend */}
+                  <div>
+                    <label className="block text-gray-300 font-bold mb-1.5">
+                      Alasan Suspend <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={suspendReason}
+                      onChange={(e) => setSuspendReason(e.target.value)}
+                      placeholder="Contoh: Berkata kotor dan menyebarkan informasi bohong di kolom diskusi..."
+                      className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-red-500 outline-none resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSuspendModalOpen(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl font-bold transition"
+                >
+                  Batal
+                </button>
+
+                {selectedSuspendUser.is_suspended ? (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSuspend(0, "")}
+                    disabled={isSuspending}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/30"
+                  >
+                    {isSuspending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Unsuspend (Buka Akses)"
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSuspend(suspendDays, suspendReason)}
+                    disabled={isSuspending || !suspendReason.trim()}
+                    className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30"
+                  >
+                    {isSuspending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Konfirmasi Suspend"
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, EyeOff, Eye, LogIn, Loader2 } from "lucide-react";
+import { Mail, Lock, EyeOff, Eye, LogIn, Loader2, Ban } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import axios from "axios";
 
@@ -41,7 +41,6 @@ export default function LoginPage() {
         router.push("/");
       }
     } catch (error: unknown) {
-      // 👈 3. Gunakan axios.isAxiosError untuk memvalidasi tipe error
       if (axios.isAxiosError(error)) {
         if (error.response?.data?.message) {
           setErrorMsg(error.response.data.message);
@@ -49,7 +48,6 @@ export default function LoginPage() {
           setErrorMsg("Kredensial tidak valid atau server bermasalah.");
         }
       } else {
-        // Tangkapan jika error bukan berasal dari API (misal: koneksi putus)
         setErrorMsg("Terjadi kesalahan yang tidak terduga.");
       }
     } finally {
@@ -74,7 +72,12 @@ export default function LoginPage() {
         </div>
 
         {errorMsg && (
-          <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400 text-center font-medium">
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/40 border-2 border-red-500/60 rounded-xl text-xs text-red-600 dark:text-red-300 font-medium whitespace-pre-line leading-relaxed shadow-lg">
+            {errorMsg.includes("DITANGGUHKAN") && (
+              <div className="flex items-center gap-2 mb-2 font-bold text-red-500 text-sm">
+                <Ban size={18} /> AKUN MAHASISWA DITANGGUHKAN (SUSPEND)
+              </div>
+            )}
             {errorMsg}
           </div>
         )}

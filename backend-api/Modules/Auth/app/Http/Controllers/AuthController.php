@@ -111,6 +111,21 @@ class AuthController extends Controller
             return response()->json(['message' => 'Silakan verifikasi email Anda terlebih dahulu.'], 403);
         }
 
+        // Cek apakah akun sedang di-suspend oleh Admin
+        if ($user->isSuspended()) {
+            $formattedUntil = $user->suspended_until
+                ? $user->suspended_until->translatedFormat('d F Y \j\a\m H:i') . ' WIB'
+                : 'Permanen';
+            $reason = $user->suspend_reason ?? 'Pelanggaran ketentuan tata tertib obrolan & informasi di sistem Lost & Found UISI';
+
+            return response()->json([
+                'message' => "Akun Anda sedang DITANGGUHKAN (SUSPEND) sampai {$formattedUntil}.\n\nAlasan Suspend: {$reason}",
+                'is_suspended' => true,
+                'suspended_until' => $user->suspended_until ? $user->suspended_until->toIso8601String() : null,
+                'suspend_reason' => $user->suspend_reason,
+            ], 403);
+        }
+
         // 🔥 TAMBAHKAN 2 BARIS INI: Ini kunci utama untuk SPA Authentication (Next.js)
         // Mendaftarkan user ke session dan mencegah serangan session fixation
         Auth::login($user);
