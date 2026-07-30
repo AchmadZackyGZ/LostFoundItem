@@ -44,10 +44,24 @@ export default function RegisterPage() {
       await register(formData);
       router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
     } catch (error: unknown) {
-      // 👈 3. Gunakan axios.isAxiosError untuk memvalidasi tipe error
       if (axios.isAxiosError(error)) {
-        if (error.response?.data?.message) {
-          setErrorMsg(error.response.data.message);
+        const responseData = error.response?.data;
+        if (responseData?.message) {
+          setErrorMsg(responseData.message);
+        } else if (responseData?.error) {
+          setErrorMsg(responseData.error);
+        } else if (responseData?.errors && typeof responseData.errors === "object") {
+          const firstErrKey = Object.keys(responseData.errors)[0];
+          const firstErrVal = responseData.errors[firstErrKey];
+          if (Array.isArray(firstErrVal) && firstErrVal.length > 0) {
+            setErrorMsg(firstErrVal[0]);
+          } else if (typeof firstErrVal === "string") {
+            setErrorMsg(firstErrVal);
+          } else {
+            setErrorMsg("Gagal mendaftar. Mohon periksa input Anda.");
+          }
+        } else if (error.code === "ERR_NETWORK" || !error.response) {
+          setErrorMsg("Gagal terhubung ke server backend. Pastikan server backend berjalan.");
         } else {
           setErrorMsg(
             "Gagal mendaftar. Periksa kembali data Anda atau coba lagi nanti.",
