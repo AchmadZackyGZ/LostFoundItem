@@ -3,11 +3,8 @@
 namespace Modules\Auth\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Item\Models\Item;
-use Modules\Item\Models\Claim;
 use Modules\Auth\Services\UserModerationService;
 use Exception;
 
@@ -25,11 +22,10 @@ class AdminUserController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $users = User::where('role', 'mahasiswa')->latest()->get();
+        $users = $this->userModerationService->getStudentUsers();
 
         $mappedUsers = $users->map(function ($user) {
-            $reportedCount = Item::where('user_id', $user->id)->count();
-            $claimsCount = Claim::where('user_id', $user->id)->count();
+            $data = $this->userModerationService->getUserProfile($user->id);
 
             return [
                 'id' => $user->id,
@@ -45,8 +41,8 @@ class AdminUserController extends Controller
                 'is_suspended' => $user->isSuspended(),
                 'suspended_until' => $user->suspended_until ? $user->suspended_until->toIso8601String() : null,
                 'suspend_reason' => $user->suspend_reason,
-                'reported_items_count' => $reportedCount,
-                'submitted_claims_count' => $claimsCount,
+                'reported_items_count' => $data['reported_items_count'],
+                'submitted_claims_count' => $data['submitted_claims_count'],
                 'created_at' => $user->created_at,
             ];
         });
@@ -58,40 +54,39 @@ class AdminUserController extends Controller
     }
 
     /**
-     * Detail Profil Pengguna (Bisa diakses oleh pengguna terautentikasi)
+     * Detail Profil Pengguna
      */
     public function getUserProfile(string $id): JsonResponse
     {
-        $targetUser = User::find($id);
+        try {
+            $data = $this->userModerationService->getUserProfile($id);
+            $targetUser = $data['user'];
 
-        if (!$targetUser) {
-            return response()->json(['message' => 'Pengguna tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'Berhasil mengambil detail profil pengguna.',
+                'data' => [
+                    'id' => $targetUser->id,
+                    'name' => $targetUser->name,
+                    'email' => $targetUser->email,
+                    'nim' => $targetUser->nim ?? ($targetUser->role === 'admin' ? '1988041201' : '3012210001'),
+                    'department' => $targetUser->department ?? ($targetUser->role === 'admin' ? 'Biro Kemahasiswaan' : 'Informatika'),
+                    'role' => $targetUser->role ?? 'mahasiswa',
+                    'phone' => $targetUser->phone ?? null,
+                    'avatar_url' => $targetUser->avatar_url ?? null,
+                    'is_email_verified' => !is_null($targetUser->email_verified_at),
+                    'is_phone_verified' => !is_null($targetUser->phone_verified_at),
+                    'is_suspended' => $targetUser->isSuspended(),
+                    'suspended_until' => $targetUser->suspended_until ? $targetUser->suspended_until->toIso8601String() : null,
+                    'suspend_reason' => $targetUser->suspend_reason,
+                    'reported_items_count' => $data['reported_items_count'],
+                    'submitted_claims_count' => $data['submitted_claims_count'],
+                    'created_at' => $targetUser->created_at,
+                ],
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        $reportedCount = Item::where('user_id', $targetUser->id)->count();
-        $claimsCount = Claim::where('user_id', $targetUser->id)->count();
-
-        return response()->json([
-            'message' => 'Berhasil mengambil detail profil pengguna.',
-            'data' => [
-                'id' => $targetUser->id,
-                'name' => $targetUser->name,
-                'email' => $targetUser->email,
-                'nim' => $targetUser->nim ?? ($targetUser->role === 'admin' ? '1988041201' : '3012210001'),
-                'department' => $targetUser->department ?? ($targetUser->role === 'admin' ? 'Biro Kemahasiswaan' : 'Informatika'),
-                'role' => $targetUser->role ?? 'mahasiswa',
-                'phone' => $targetUser->phone ?? null,
-                'avatar_url' => $targetUser->avatar_url ?? null,
-                'is_email_verified' => !is_null($targetUser->email_verified_at),
-                'is_phone_verified' => !is_null($targetUser->phone_verified_at),
-                'is_suspended' => $targetUser->isSuspended(),
-                'suspended_until' => $targetUser->suspended_until ? $targetUser->suspended_until->toIso8601String() : null,
-                'suspend_reason' => $targetUser->suspend_reason,
-                'reported_items_count' => $reportedCount,
-                'submitted_claims_count' => $claimsCount,
-                'created_at' => $targetUser->created_at,
-            ],
-        ], 200);
     }
 
     /**
@@ -99,18 +94,17 @@ class AdminUserController extends Controller
      */
     public function verifyUser(string $id): JsonResponse
     {
-        $targetUser = User::find($id);
+        try {
+            $targetUser = $this->userModerationService->verifyUserEmail($id);
 
-        if (!$targetUser) {
-            return response()->json(['message' => 'Pengguna tidak ditemukan'], 404);
+            return response()->json([
+                'message' => "Akun {$targetUser->name} telah berhasil diverifikasi oleh Admin.",
+                'data' => $targetUser,
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        $targetUser->update(['email_verified_at' => now()]);
-
-        return response()->json([
-            'message' => "Akun {$targetUser->name} telah berhasil diverifikasi oleh Admin.",
-            'data' => $targetUser,
-        ], 200);
     }
 
     /**
@@ -160,20 +154,15 @@ class AdminUserController extends Controller
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
-        $targetUser = User::find($id);
+        try {
+            $this->userModerationService->deleteUserAccount($id, $request->user()->id);
 
-        if (!$targetUser) {
-            return response()->json(['message' => 'Pengguna tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'Akun pengguna berhasil dihapus dari sistem.',
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        if ($targetUser->id === $request->user()->id) {
-            return response()->json(['message' => 'Anda tidak bisa menghapus akun Anda sendiri.'], 400);
-        }
-
-        $targetUser->delete();
-
-        return response()->json([
-            'message' => 'Akun pengguna berhasil dihapus dari sistem.',
-        ], 200);
     }
 }
