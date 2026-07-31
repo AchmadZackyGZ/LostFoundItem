@@ -25,6 +25,9 @@ class AuthClientService implements AuthClientInterface
             'department' => $user->department ?? 'Informatika',
             'nim' => $user->nim ?? '-',
             'avatar_url' => $user->avatar_url,
+            'is_suspended' => $user->isSuspended(),
+            'suspended_until' => $user->suspended_until ? $user->suspended_until->toIso8601String() : null,
+            'suspend_reason' => $user->suspend_reason,
         ];
     }
 }

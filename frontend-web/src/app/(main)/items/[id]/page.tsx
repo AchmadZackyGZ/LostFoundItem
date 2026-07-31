@@ -29,6 +29,12 @@ import {
   GraduationCap,
   CreditCard,
   Mail,
+  ShieldAlert,
+  Ban,
+  Phone,
+  Award,
+  Activity,
+  Briefcase,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -65,6 +71,7 @@ interface ItemDetail {
   images?: string[];
   status: string;
   reporter: {
+    id?: string;
     name: string;
     email: string;
     avatar_url?: string;
@@ -75,6 +82,7 @@ interface ItemDetail {
 export default function ItemDetailPage() {
   const params = useParams();
   const id = params.id;
+  const { user } = useAuthStore();
 
   // --- STATE UTAMA ---
   const [item, setItem] = useState<ItemDetail | null>(null);
@@ -102,6 +110,91 @@ export default function ItemDetailPage() {
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
   const [claimError, setClaimError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- STATE ADMIN MODAL SUSPEND MAHASISWA ---
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [selectedSuspendUser, setSelectedSuspendUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    nim: string;
+    department: string;
+    is_suspended?: boolean;
+    suspend_reason?: string;
+  } | null>(null);
+  const [suspendDays, setSuspendDays] = useState(7);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [isSuspending, setIsSuspending] = useState(false);
+
+  const handleExecuteSuspend = async (days: number, reason: string) => {
+    if (!selectedSuspendUser) return;
+    setIsSuspending(true);
+
+    try {
+      const res = await api.put(`/api/v1/admin/users/${selectedSuspendUser.id}/suspend`, {
+        days,
+        suspend_reason: reason,
+      });
+
+      alert(res.data.message || "Status penangguhan akun pengguna berhasil diperbarui.");
+      setIsSuspendModalOpen(false);
+      fetchItemDetail();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Gagal mengubah status penangguhan pengguna.");
+    } finally {
+      setIsSuspending(false);
+    }
+  };
+
+  // --- STATE MODAL PROFILE DETAIL PENGGUNA ---
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileDetailUser, setProfileDetailUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    nim: string;
+    department: string;
+    role: string;
+    phone?: string;
+    avatar_url?: string;
+    is_email_verified?: boolean;
+    is_phone_verified?: boolean;
+    is_suspended?: boolean;
+    suspended_until?: string | null;
+    suspend_reason?: string | null;
+    reported_items_count?: number;
+    submitted_claims_count?: number;
+    created_at?: string;
+  } | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+
+  const handleOpenUserProfile = async (userId: string | number, fallbackUser?: any) => {
+    setIsLoadingProfile(true);
+    setIsProfileModalOpen(true);
+
+    if (fallbackUser) {
+      setProfileDetailUser({
+        id: String(userId),
+        name: fallbackUser.name,
+        email: fallbackUser.email || "-",
+        nim: fallbackUser.nim || (fallbackUser.role === 'admin' ? '1988041201' : '3012210001'),
+        department: fallbackUser.department || 'Informatika',
+        role: fallbackUser.role || 'mahasiswa',
+        avatar_url: fallbackUser.avatar_url,
+      });
+    }
+
+    try {
+      const response = await api.get(`/api/v1/users/${userId}`);
+      if (response.data?.data) {
+        setProfileDetailUser(response.data.data);
+      }
+    } catch (err) {
+      console.log("Menggunakan data fallback profil pengguna.");
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
 
   // --- FUNGSI AMBIL DATA ---
   const fetchItemDetail = async () => {
@@ -652,24 +745,39 @@ export default function ItemDetailPage() {
             </div>
 
             {/* Reporter Profile Badge */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-full bg-primary/20 text-primary dark:text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0 overflow-hidden border border-primary/30">
-                {item.reporter.avatar_url ? (
-                  <img
-                    src={item.reporter.avatar_url}
-                    alt={item.reporter.name}
-                    className="w-full h-full object-cover rounded-full"
-                  />
-                ) : (
-                  <User size={16} />
-                )}
+            <div
+              onClick={() =>
+                handleOpenUserProfile(
+                  (item as any).user_id || (item.reporter as any)?.id || "1",
+                  item.reporter,
+                )
+              }
+              className="p-3 bg-gray-50 dark:bg-gray-900/60 hover:bg-blue-50/50 dark:hover:bg-gray-800/80 cursor-pointer transition rounded-xl border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3 mb-5 group/reporter"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-primary/20 text-primary dark:text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0 overflow-hidden border border-primary/30 group-hover/reporter:scale-105 transition">
+                  {item.reporter.avatar_url ? (
+                    <img
+                      src={item.reporter.avatar_url}
+                      alt={item.reporter.name}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <User size={16} />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400 font-medium">
+                    Pelapor Barang (Klik Profil)
+                  </p>
+                  <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover/reporter:text-blue-400 transition">
+                    {item.reporter.name} ({item.reporter.email})
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-400 font-medium">Pelapor Barang</p>
-                <p className="text-xs font-bold text-gray-900 dark:text-white">
-                  {item.reporter.name} ({item.reporter.email})
-                </p>
-              </div>
+              <span className="text-[11px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg flex-shrink-0">
+                Lihat Detail →
+              </span>
             </div>
 
             <button
@@ -718,10 +826,12 @@ export default function ItemDetailPage() {
                           <img
                             src={msg.user.avatar_url}
                             alt={msg.user.name}
+                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
                             className="w-8 h-8 rounded-full object-cover shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-primary transition"
                           />
                         ) : (
                           <div
+                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
                             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm cursor-pointer hover:ring-2 hover:ring-primary transition ${isUserAdmin ? "bg-purple-600" : isPelapor ? "bg-primary" : "bg-gray-500"}`}
                           >
                             {msg.user.name.charAt(0).toUpperCase()}
@@ -782,13 +892,50 @@ export default function ItemDetailPage() {
                                 {msg.user.email || "-"}
                               </span>
                             </div>
+
+                            <button
+                              onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                              className="w-full mt-2 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              🔍 Detail Profile Pengguna
+                            </button>
+
+                            {user?.role === "admin" && !isUserAdmin && (
+                              <button
+                                onClick={() => {
+                                  setSelectedSuspendUser({
+                                    id: String(msg.user.id),
+                                    name: msg.user.name,
+                                    email: msg.user.email || "-",
+                                    nim: msg.user.nim || "3012210001",
+                                    department: msg.user.department || "Informatika",
+                                    is_suspended: (msg.user as any).is_suspended || false,
+                                    suspend_reason: (msg.user as any).suspend_reason || "",
+                                  });
+                                  setSuspendReason(
+                                    (msg.user as any).suspend_reason ||
+                                      "Berkata kotor dan menyebarkan informasi bohong di diskusi",
+                                  );
+                                  setIsSuspendModalOpen(true);
+                                }}
+                                className="w-full mt-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/40 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
+                              >
+                                <ShieldAlert size={14} />{" "}
+                                {(msg.user as any).is_suspended
+                                  ? "Buka Suspend Akun"
+                                  : "Suspend Akun Mahasiswa"}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 mb-1">
-                          <span className="font-bold text-xs text-gray-900 dark:text-white cursor-pointer hover:underline">
+                          <span
+                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                            className="font-bold text-xs text-gray-900 dark:text-white cursor-pointer hover:underline hover:text-blue-400 transition"
+                          >
                             {msg.user.name} {isPelapor && "(Pelapor)"}
                           </span>
                           <span className="text-[10px] text-gray-500" suppressHydrationWarning>
@@ -1049,6 +1196,302 @@ export default function ItemDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* 🚫 MODAL ADMIN SUSPEND AKUN MAHASISWA */}
+      {/* ================================================================= */}
+      {isSuspendModalOpen && selectedSuspendUser && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0d1527] border-2 border-red-500/50 rounded-2xl max-w-md w-full p-6 text-white shadow-[0_20px_50px_rgba(239,68,68,0.35)] animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-500 border border-red-500/40 flex items-center justify-center font-bold">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    Suspend Akun Mahasiswa
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Moderasi & Penangguhan Akun
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSuspendModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              {/* User Info Header */}
+              <div className="bg-gray-900/80 p-3.5 rounded-xl border border-gray-800 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                  {selectedSuspendUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-sm text-white truncate">
+                    {selectedSuspendUser.name}
+                  </h4>
+                  <p className="text-gray-400 text-[11px] font-mono">
+                    NIM: {selectedSuspendUser.nim} • {selectedSuspendUser.department}
+                  </p>
+                  <p className="text-gray-400 text-[11px] truncate">
+                    {selectedSuspendUser.email}
+                  </p>
+                </div>
+              </div>
+
+              {selectedSuspendUser.is_suspended ? (
+                <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">
+                  <p className="font-bold mb-1 flex items-center gap-1.5 text-xs text-red-400">
+                    <Ban size={15} /> Status Akun Saat Ini: DITANGGUHKAN (SUSPEND)
+                  </p>
+                  <p className="text-[11px] text-gray-300">
+                    Alasan: {selectedSuspendUser.suspend_reason || "Pelanggaran aturan"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Durasi Suspend */}
+                  <div>
+                    <label className="block text-gray-300 font-bold mb-1.5">
+                      Durasi Penangguhan (Suspend):
+                    </label>
+                    <select
+                      value={suspendDays}
+                      onChange={(e) => setSuspendDays(Number(e.target.value))}
+                      className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-3.5 py-2.5 text-xs focus:ring-2 focus:ring-red-500 outline-none"
+                    >
+                      <option value={1}>1 Hari</option>
+                      <option value={3}>3 Hari</option>
+                      <option value={7}>7 Hari (1 Minggu - Rekomendasi)</option>
+                      <option value={30}>30 Hari (1 Bulan)</option>
+                      <option value={36500}>Permanen / Selamanya</option>
+                    </select>
+                  </div>
+
+                  {/* Alasan Suspend */}
+                  <div>
+                    <label className="block text-gray-300 font-bold mb-1.5">
+                      Alasan Suspend <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={suspendReason}
+                      onChange={(e) => setSuspendReason(e.target.value)}
+                      placeholder="Contoh: Berkata kotor dan menyebarkan informasi bohong di kolom diskusi..."
+                      className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-red-500 outline-none resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSuspendModalOpen(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl font-bold transition"
+                >
+                  Batal
+                </button>
+
+                {selectedSuspendUser.is_suspended ? (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSuspend(0, "")}
+                    disabled={isSuspending}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/30"
+                  >
+                    {isSuspending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Unsuspend (Buka Akses)"
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSuspend(suspendDays, suspendReason)}
+                    disabled={isSuspending || !suspendReason.trim()}
+                    className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30"
+                  >
+                    {isSuspending ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Konfirmasi Suspend"
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* 👤 MODAL USER PROFILE DETAIL (LENGKAP) */}
+      {/* ================================================================= */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0b1220] border-2 border-blue-500/40 rounded-3xl max-w-md w-full overflow-hidden text-white shadow-[0_25px_60px_rgba(0,0,0,0.85)] animate-in fade-in zoom-in-95 duration-200">
+            {/* Header Cover Banner */}
+            <div className="h-24 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative p-4 flex justify-end items-start">
+              <button
+                onClick={() => setIsProfileModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition backdrop-blur-sm"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Profile Content Body */}
+            <div className="px-6 pb-6 pt-0 relative">
+              {/* Avatar Picture Overlapping Banner */}
+              <div className="flex justify-between items-end -mt-12 mb-4">
+                <div className="w-24 h-24 rounded-2xl bg-[#090e1a] border-4 border-[#0b1220] overflow-hidden shadow-xl flex items-center justify-center text-3xl font-extrabold text-blue-400">
+                  {profileDetailUser?.avatar_url ? (
+                    <img
+                      src={profileDetailUser.avatar_url}
+                      alt={profileDetailUser.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    profileDetailUser?.name?.charAt(0).toUpperCase() || "U"
+                  )}
+                </div>
+
+                <div className="flex flex-col items-end gap-1 mb-1">
+                  <span className="px-3 py-1 bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded-full text-xs font-bold uppercase tracking-wider">
+                    {profileDetailUser?.role === "admin" ? "Campus Admin" : "Mahasiswa Aktif"}
+                  </span>
+
+                  <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-semibold flex items-center gap-1">
+                    <ShieldCheck size={12} /> Civitas UISI Verified
+                  </span>
+                </div>
+              </div>
+
+              {/* Name & Main Info */}
+              <div className="mb-5">
+                <h3 className="text-xl font-bold text-white tracking-tight">
+                  {profileDetailUser?.name || "Nama Pengguna"}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Pengguna Terverifikasi Sistem Lost & Found Universitas Internasional Semen Indonesia
+                </p>
+              </div>
+
+              {/* Detail Info Grid */}
+              <div className="space-y-2.5 text-xs">
+                {/* Departemen / Prodi */}
+                <div className="p-3 bg-[#080d18] border border-gray-800 rounded-xl flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2 font-medium">
+                    <GraduationCap size={15} className="text-blue-400" /> Program Studi / Departemen
+                  </span>
+                  <span className="font-bold text-gray-200">
+                    {profileDetailUser?.department || "Informatika"}
+                  </span>
+                </div>
+
+                {/* NIM / NIP */}
+                <div className="p-3 bg-[#080d18] border border-gray-800 rounded-xl flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2 font-medium">
+                    <CreditCard size={15} className="text-emerald-400" /> NIM / Nomor Induk
+                  </span>
+                  <span className="font-mono font-bold text-blue-300">
+                    {profileDetailUser?.nim || "3012410044"}
+                  </span>
+                </div>
+
+                {/* Email Kampus */}
+                <div className="p-3 bg-[#080d18] border border-gray-800 rounded-xl flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2 font-medium">
+                    <Mail size={15} className="text-amber-400" /> Email Resmi Kampus
+                  </span>
+                  <span className="font-medium text-gray-200 truncate max-w-[180px]">
+                    {profileDetailUser?.email || "-"}
+                  </span>
+                </div>
+
+                {/* Status Moderasi Akun */}
+                <div className="p-3 bg-[#080d18] border border-gray-800 rounded-xl flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2 font-medium">
+                    <Activity size={15} className="text-purple-400" /> Status Akun Sistem
+                  </span>
+                  {profileDetailUser?.is_suspended ? (
+                    <span className="font-bold text-red-400 bg-red-500/20 border border-red-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <Ban size={12} /> Ditangguhkan (Suspend)
+                    </span>
+                  ) : (
+                    <span className="font-bold text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Aktif Normal
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Statistics Activity Card */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="p-3 bg-blue-950/30 border border-blue-800/40 rounded-xl text-center">
+                  <span className="text-[10px] text-blue-400 font-bold uppercase block tracking-wider">Total Laporan</span>
+                  <span className="text-lg font-extrabold text-white mt-0.5 block">
+                    {profileDetailUser?.reported_items_count ?? 0} Barang
+                  </span>
+                </div>
+
+                <div className="p-3 bg-indigo-950/30 border border-indigo-800/40 rounded-xl text-center">
+                  <span className="text-[10px] text-indigo-400 font-bold uppercase block tracking-wider">Total Klaim</span>
+                  <span className="text-lg font-extrabold text-white mt-0.5 block">
+                    {profileDetailUser?.submitted_claims_count ?? 0} Klaim
+                  </span>
+                </div>
+              </div>
+
+              {/* Admin Action Button if logged in user is admin */}
+              {user?.role === "admin" && profileDetailUser?.role !== "admin" && (
+                <button
+                  onClick={() => {
+                    if (!profileDetailUser) return;
+                    setIsProfileModalOpen(false);
+                    setSelectedSuspendUser({
+                      id: String(profileDetailUser.id),
+                      name: profileDetailUser.name,
+                      email: profileDetailUser.email || "-",
+                      nim: profileDetailUser.nim || "3012410044",
+                      department: profileDetailUser.department || "Informatika",
+                      is_suspended: profileDetailUser.is_suspended || false,
+                      suspend_reason: profileDetailUser.suspend_reason || "",
+                    });
+                    setSuspendReason(
+                      profileDetailUser.suspend_reason ||
+                        "Berkata kotor dan menyebarkan informasi bohong di diskusi",
+                    );
+                    setIsSuspendModalOpen(true);
+                  }}
+                  className="w-full mt-4 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/40 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-md"
+                >
+                  <ShieldAlert size={15} />{" "}
+                  {profileDetailUser?.is_suspended
+                    ? "Pencabutan Suspend (Unsuspend Akun)"
+                    : "Suspend Akun Mahasiswa Ini"}
+                </button>
+              )}
+
+              {/* Close Button */}
+              <button
+                onClick={() => setIsProfileModalOpen(false)}
+                className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl text-xs font-bold transition"
+              >
+                Tutup Profil
+              </button>
+            </div>
           </div>
         </div>
       )}
