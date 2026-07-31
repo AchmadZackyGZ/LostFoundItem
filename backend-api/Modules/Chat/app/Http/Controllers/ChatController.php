@@ -5,130 +5,102 @@ namespace Modules\Chat\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Chat\Models\Conversation;
-use Modules\Chat\Models\Message;
+use Modules\Chat\Services\ChatService;
 use Modules\Item\Contracts\ItemServiceInterface;
+use Exception;
 
 class ChatController extends Controller
 {
-
     protected ItemServiceInterface $itemService;
+    protected ChatService $chatService;
 
-    // 💉 DEPENDENCY INJECTION SANGAT ELEGAN
-    public function __construct(ItemServiceInterface $itemService)
-    {
+    public function __construct(
+        ItemServiceInterface $itemService,
+        ChatService $chatService
+    ) {
         $this->itemService = $itemService;
+        $this->chatService = $chatService;
     }
 
-    // 1. MEMULAI ATAU MEMBUKA RUANG OBROLAN (Sihir Tokopedia)
+    /**
+     * Memulai atau Membuka Ruang Obrolan
+     */
     public function initiateConversation(Request $request, string $itemId): JsonResponse
     {
-        // ✅ Panggil lewat Contract, bukan Model! (Loose Coupling)
         $item = $this->itemService->findItemById($itemId);
 
         if (!$item) {
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
-        $userId = $request->user()->id; // Orang yang mau nge-chat (Finder/Seeker)
-        $ownerId = $item->user_id; // Orang yang memposting barang
+        try {
+            $conversation = $this->chatService->initiateConversation(
+                $itemId,
+                $request->user()->id,
+                $item->user_id
+            );
 
-        // 🚨 Cegah user chat dirinya sendiri
-        if ($userId === $ownerId) {
-            return response()->json(['message' => 'Anda tidak bisa chat dengan diri sendiri.'], 400);
+            return response()->json([
+                'message' => 'Ruang obrolan berhasil dimuat.',
+                'data' => $conversation
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        // 🔍 Cek apakah mereka sudah punya room chat untuk barang ini
-        $conversation = Conversation::where('item_id', $itemId)
-            ->where(function ($query) use ($userId, $ownerId) {
-                $query->where('finder_id', $userId)->where('owner_id', $ownerId)
-                    ->orWhere('finder_id', $ownerId)->where('owner_id', $userId);
-            })->first();
-
-        // 🛠️ Jika belum ada, buatkan Room baru
-        if (!$conversation) {
-            $conversation = Conversation::create([
-                'item_id' => $itemId,
-                'finder_id' => $userId,
-                'owner_id' => $ownerId,
-            ]);
-        }
-
-        return response()->json([
-            'message' => 'Ruang obrolan berhasil dimuat.',
-            'data' => $conversation
-        ], 200);
     }
 
-    // 2. MENGIRIM PESAN
+    /**
+     * Mengirim Pesan
+     */
     public function sendMessage(Request $request, string $conversationId): JsonResponse
     {
         $request->validate(['message' => 'required|string']);
 
-        $conversation = Conversation::find($conversationId);
+        try {
+            $message = $this->chatService->sendMessage(
+                $conversationId,
+                $request->user()->id,
+                $request->message
+            );
 
-        if (!$conversation) {
-            return response()->json(['message' => 'Ruang obrolan tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'Pesan terkirim.',
+                'data' => $message
+            ], 201);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        $userId = $request->user()->id;
-
-        // 🚨 Pastikan user adalah bagian dari chat ini (Bukan penyusup)
-        if ($conversation->finder_id !== $userId && $conversation->owner_id !== $userId) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
-
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id' => $userId,
-            'message' => $request->message,
-            'is_read' => false
-        ]);
-
-        return response()->json([
-            'message' => 'Pesan terkirim.',
-            'data' => $message
-        ], 201);
     }
 
-    // 3. MENGAMBIL RIWAYAT PESAN (Chat History)
+    /**
+     * Mengambil Riwayat Pesan (Chat History)
+     */
     public function getMessages(Request $request, string $conversationId): JsonResponse
     {
-        $conversation = Conversation::find($conversationId);
+        try {
+            $messages = $this->chatService->getMessages(
+                $conversationId,
+                $request->user()->id
+            );
 
-        if (!$conversation) {
-            return response()->json(['message' => 'Ruang obrolan tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'Berhasil mengambil riwayat pesan.',
+                'data' => $messages
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        // 🚨 Gembok Privasi
-        $userId = $request->user()->id;
-        if ($conversation->finder_id !== $userId && $conversation->owner_id !== $userId) {
-            return response()->json(['message' => 'Akses ditolak.'], 403);
-        }
-
-        // Tarik pesan urut dari yang paling lama ke terbaru (seperti WhatsApp)
-        $messages = Message::where('conversation_id', $conversationId)
-            ->with('sender:id,name') // Bawa nama pengirim
-            ->orderBy('created_at', 'asc')
-            ->get();
-
-        return response()->json([
-            'message' => 'Berhasil mengambil riwayat pesan.',
-            'data' => $messages
-        ], 200);
     }
 
-    // 4. DAFTAR SEMUA OBROLAN USER (Untuk Halaman "Inbox" di Frontend)
+    /**
+     * Daftar Semua Obrolan User
+     */
     public function myConversations(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
-
-        // Tarik semua room dimana user adalah finder ATAU owner
-        $conversations = Conversation::where('finder_id', $userId)
-            ->orWhere('owner_id', $userId)
-            ->with(['item:id,title,image_path', 'finder:id,name', 'owner:id,name'])
-            ->latest() // Urutkan room terbaru
-            ->get();
+        $conversations = $this->chatService->getUserConversations($request->user()->id);
 
         return response()->json([
             'message' => 'Berhasil mengambil daftar obrolan Anda.',

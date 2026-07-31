@@ -5,16 +5,24 @@ namespace Modules\Notification\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Notification\Models\AppNotification;
+use Modules\Notification\Services\NotificationService;
+use Exception;
 
 class NotificationController extends Controller
 {
-    // 1. AMBIL SEMUA NOTIFIKASI USER
+    private NotificationService $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
+    /**
+     * Ambil Seluruh Notifikasi User Login
+     */
     public function index(Request $request): JsonResponse
     {
-        $notifications = AppNotification::where('user_id', $request->user()->id)
-            ->latest()
-            ->get();
+        $notifications = $this->notificationService->getUserNotifications($request->user()->id);
 
         return response()->json([
             'message' => 'Berhasil mengambil notifikasi.',
@@ -22,31 +30,30 @@ class NotificationController extends Controller
         ], 200);
     }
 
-    // 2. TANDAI NOTIFIKASI SUDAH DIBACA
+    /**
+     * Tandai Single Notifikasi Sudah Dibaca
+     */
     public function markAsRead(Request $request, string $id): JsonResponse
     {
-        $notification = AppNotification::where('id', $id)
-            ->where('user_id', $request->user()->id)
-            ->first();
+        try {
+            $notification = $this->notificationService->markAsRead($id, $request->user()->id);
 
-        if (!$notification) {
-            return response()->json(['message' => 'Notifikasi tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'Notifikasi ditandai telah dibaca.',
+                'data' => $notification
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        $notification->update(['is_read' => true]);
-
-        return response()->json([
-            'message' => 'Notifikasi ditandai telah dibaca.',
-            'data' => $notification
-        ], 200);
     }
 
-    // 3. TANDAI SEMUA NOTIFIKASI SUDAH DIBACA
+    /**
+     * Tandai Semua Notifikasi Sudah Dibaca
+     */
     public function markAllAsRead(Request $request): JsonResponse
     {
-        AppNotification::where('user_id', $request->user()->id)
-            ->where('is_read', false)
-            ->update(['is_read' => true]);
+        $this->notificationService->markAllAsRead($request->user()->id);
 
         return response()->json([
             'message' => 'Semua notifikasi ditandai telah dibaca.'
