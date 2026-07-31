@@ -1771,10 +1771,10 @@ export default function AdminDashboardPage() {
                           {/* System Activity Counts */}
                           <td className="py-4 pr-4 text-xs text-gray-400 font-medium">
                             <span className="block text-gray-300">
-                              📦 {u.reported_items_count} Laporan
+                              {u.reported_items_count} Laporan
                             </span>
                             <span className="block text-gray-400 text-[11px]">
-                              📋 {u.submitted_claims_count} Klaim
+                              {u.submitted_claims_count} Klaim
                             </span>
                           </td>
 

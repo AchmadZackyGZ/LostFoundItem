@@ -16,7 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class
         ]);
-        // 🔥 TAMBAHKAN BARIS INI: Mengaktifkan Cookie Sanctum SPA untuk Route API
+        // Mengaktifkan Cookie Sanctum SPA untuk Route API
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -43,8 +43,8 @@ export default function ActivityPage() {
         if (isMounted) {
           setNotifications(response.data?.data || []);
         }
-      } catch (err) {
-        console.error("Gagal mengambil notifikasi aktivitas:", err);
+      } catch {
+        // Biarkan fallback / data kosong dimuat jika belum login
       } finally {
         if (isMounted) {
           setIsLoading(false);

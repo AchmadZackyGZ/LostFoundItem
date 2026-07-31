@@ -130,7 +130,22 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        if ($request->user()) {
+            $token = $request->user()->currentAccessToken();
+
+            // Hapus token HANYA jika berupa PersonalAccessToken (bukan TransientToken dari cookie SPA)
+            if ($token && method_exists($token, 'delete')) {
+                $token->delete();
+            }
+
+            // Invalidate session & CSRF token (SPA Web Next.js)
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+        }
+
         return response()->json(['message' => 'Logout berhasil.']);
     }
 
