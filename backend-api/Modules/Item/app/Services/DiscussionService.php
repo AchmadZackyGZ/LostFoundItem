@@ -32,12 +32,12 @@ class DiscussionService
             'message' => $message,
         ]);
 
-        $discussion->load('user');
+        $discussion->setRelation('user', $user);
 
         // Broadcast Real-Time via Pusher WebSocket Client secara Dinamis dari .env / Config
-        $pusherKey = config('broadcasting.connections.pusher.key') ?: env('PUSHER_APP_KEY');
-        $pusherSecret = config('broadcasting.connections.pusher.secret') ?: env('PUSHER_APP_SECRET');
-        $pusherId = config('broadcasting.connections.pusher.app_id') ?: env('PUSHER_APP_ID');
+        $pusherKey = config('broadcasting.connections.pusher.key') ?: env('PUSHER_APP_KEY', 'b829baf1ed757a809bf3');
+        $pusherSecret = config('broadcasting.connections.pusher.secret') ?: env('PUSHER_APP_SECRET', '62959d7a0d92acbd7334');
+        $pusherId = config('broadcasting.connections.pusher.app_id') ?: env('PUSHER_APP_ID', '2180462');
         $pusherCluster = config('broadcasting.connections.pusher.options.cluster') ?: env('PUSHER_APP_CLUSTER', 'ap1');
 
         if ($pusherKey && $pusherSecret && $pusherId) {
@@ -52,23 +52,25 @@ class DiscussionService
                     ]
                 );
 
-                $pusher->trigger("item-discussion.{$itemId}", 'discussion-posted', [
-                    'discussion' => [
-                        'id' => $discussion->id,
-                        'item_id' => $discussion->item_id,
-                        'message' => $discussion->message,
-                        'created_at' => $discussion->created_at->toIso8601String(),
-                        'user' => [
-                            'id' => $discussion->user->id,
-                            'name' => $discussion->user->name,
-                            'email' => $discussion->user->email,
-                            'department' => $discussion->user->department ?? 'Informatika',
-                            'role' => $discussion->user->role ?? 'mahasiswa',
-                            'nim' => $discussion->user->nim ?? ($discussion->user->role === 'admin' ? '1988041201' : '3012210001'),
-                            'avatar_url' => $discussion->user->avatar_url ?? null,
-                        ],
+                $flatPayload = [
+                    'id' => $discussion->id,
+                    'item_id' => $discussion->item_id,
+                    'message' => $discussion->message,
+                    'created_at' => $discussion->created_at ? $discussion->created_at->toIso8601String() : now()->toIso8601String(),
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email ?? '-',
+                        'department' => $user->department ?? 'Informatika',
+                        'role' => $user->role ?? 'mahasiswa',
+                        'nim' => $user->nim ?? ($user->role === 'admin' ? '1988041201' : '3012210001'),
+                        'avatar_url' => $user->avatar_url ?? null,
                     ]
-                ]);
+                ];
+
+                // Trigger langsung dengan flat object agar kodingan FE & Mobile mendapatkan objek pesan langsung
+                $pusher->trigger("item-discussion-{$itemId}", 'new-discussion', $flatPayload);
+                $pusher->trigger("item-discussion.{$itemId}", 'discussion-posted', $flatPayload);
             } catch (Exception $e) {
                 logger()->error('Pusher broadcast failed: ' . $e->getMessage());
             }

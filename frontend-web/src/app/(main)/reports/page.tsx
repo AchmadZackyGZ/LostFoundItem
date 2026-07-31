@@ -7,9 +7,10 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  Sparkles,
-  X,
   BellRing,
+  X,
+  ShieldCheck,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -27,16 +28,34 @@ interface MyItem {
   image_path?: string;
 }
 
+// Interface sesuai dengan mapping backend di myClaims
+interface MyClaim {
+  id: string;
+  item_id: string;
+  item_title: string;
+  proof_description: string;
+  proof_image_path?: string;
+  status: string;
+  created_at: string;
+}
+
 export default function ReportsPage() {
   const [reports, setReports] = useState<MyItem[]>([]);
+  const [claims, setClaims] = useState<MyClaim[]>([]);
+  const [activeTab, setActiveTab] = useState<"items" | "claims">("items");
   const [isLoading, setIsLoading] = useState(true);
   const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
 
-  // Tarik data laporan dari API dengan 5-detik interval polling real-time
-  const fetchMyItems = async () => {
+  // Tarik data laporan dan data klaim dari API dengan 5-detik interval polling real-time
+  const fetchMyData = async () => {
     try {
-      const response = await api.get("/api/v1/my-items");
-      const newItems: MyItem[] = response.data.data || [];
+      const [itemsRes, claimsRes] = await Promise.all([
+        api.get("/api/v1/my-items"),
+        api.get("/api/v1/my-claims"),
+      ]);
+
+      const newItems: MyItem[] = itemsRes.data.data || [];
+      const newClaims: MyClaim[] = claimsRes.data.data || [];
 
       setReports((prevReports) => {
         if (prevReports.length > 0) {
@@ -55,27 +74,35 @@ export default function ReportsPage() {
         }
         return newItems;
       });
+
+      setClaims(newClaims);
     } catch (error) {
-      console.error("Gagal mengambil data laporan:", error);
+      console.error("Gagal mengambil data laporan/klaim:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMyItems();
-    const interval = setInterval(fetchMyItems, 5000); // Polling otomatis setiap 5 detik
+    fetchMyData();
+    const interval = setInterval(fetchMyData, 5000); // Polling otomatis setiap 5 detik
     return () => clearInterval(interval);
   }, []);
 
-  // Hitung Statistik secara Dinamis
+  // Hitung Statistik secara Dinamis (Gabungan Laporan Barang + Klaim)
   const activeCount = reports.filter(
     (r) => r.status === "active" || r.status === "is_pending",
   ).length;
-  const completedCount = reports.filter((r) => r.status === "completed").length;
-  const pendingCount = reports.filter((r) => r.status === "pending").length;
 
-  // Konfigurasi Label Status berdasarkan PRD
+  const pendingReportsCount = reports.filter((r) => r.status === "pending").length;
+  const pendingClaimsCount = claims.filter((c) => c.status === "pending").length;
+  const pendingCount = pendingReportsCount + pendingClaimsCount;
+
+  const completedReportsCount = reports.filter((r) => r.status === "completed").length;
+  const approvedClaimsCount = claims.filter((c) => c.status === "approved").length;
+  const completedCount = completedReportsCount + approvedClaimsCount;
+
+  // Konfigurasi Label Status Laporan Barang
   const getStatusConfig = (status: string) => {
     switch (status) {
       case "pending":
@@ -91,10 +118,24 @@ export default function ReportsPage() {
     }
   };
 
+  // Konfigurasi Label Status Klaim Barang
+  const getClaimStatusConfig = (status: string) => {
+    switch (status) {
+      case "pending":
+        return { label: "Klaim Menunggu Validasi", dot: "bg-yellow-500" };
+      case "approved":
+        return { label: "Klaim Disetujui 🎉", dot: "bg-green-500" };
+      case "rejected":
+        return { label: "Klaim Ditolak", dot: "bg-red-500" };
+      default:
+        return { label: status, dot: "bg-gray-500" };
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-[70vh] text-gray-900 dark:text-white">
-        <Loader2 className="animate-spin mr-2" /> Memuat daftar laporan...
+        <Loader2 className="animate-spin mr-2" /> Memuat daftar laporan & klaim...
       </div>
     );
   }
@@ -128,10 +169,10 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Daftar Laporan Anda
+            Daftar Laporan & Klaim Anda
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Ringkasan seluruh laporan kehilangan dan temuan Anda.
+            Ringkasan seluruh laporan barang dan pengajuan klaim milik Anda.
           </p>
         </div>
         <Link
@@ -156,6 +197,7 @@ export default function ReportsPage() {
             {activeCount}
           </p>
         </div>
+
         <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4 text-gray-600 dark:text-gray-400">
             <Clock size={20} className="text-yellow-600 dark:text-yellow-500" />
@@ -164,7 +206,11 @@ export default function ReportsPage() {
           <p className="text-4xl font-bold text-gray-900 dark:text-white">
             {pendingCount}
           </p>
+          <p className="text-xs text-gray-500 mt-1 font-medium">
+            ({pendingReportsCount} Laporan • {pendingClaimsCount} Klaim)
+          </p>
         </div>
+
         <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4 text-gray-600 dark:text-gray-400">
             <CheckCircle2
@@ -179,82 +225,170 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* List Section */}
-      <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-            Riwayat Laporan Terbaru
-          </h2>
-        </div>
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => setActiveTab("items")}
+          className={clsx(
+            "flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition shadow-sm border",
+            activeTab === "items"
+              ? "bg-blue-600 text-white border-blue-500"
+              : "bg-surface dark:bg-surface-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800",
+          )}
+        >
+          <FileText size={16} /> Laporan Barang Saya ({reports.length})
+        </button>
 
-        {reports.length === 0 ? (
-          <div className="p-10 text-center text-gray-500">
-            Anda belum pernah membuat laporan barang.
+        <button
+          onClick={() => setActiveTab("claims")}
+          className={clsx(
+            "flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition shadow-sm border",
+            activeTab === "claims"
+              ? "bg-blue-600 text-white border-blue-500"
+              : "bg-surface dark:bg-surface-dark text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800",
+          )}
+        >
+          <ShieldCheck size={16} /> Pengajuan Klaim Saya ({claims.length})
+        </button>
+      </div>
+
+      {/* List Section: Laporan Barang */}
+      {activeTab === "items" && (
+        <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+              Riwayat Laporan Barang Anda
+            </h2>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {reports.map((report) => {
-              const statusConfig = getStatusConfig(report.status);
 
-              return (
-                <Link
-                  href={`/items/${report.id}`}
-                  key={report.id}
-                  className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer block"
-                >
-                  <div className="flex gap-5 items-center">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700 relative">
-                      <Image
-                        src={
-                          report.image_path ||
-                          "https://via.placeholder.com/150?text=No+Image"
-                        }
-                        alt={report.title}
-                        fill
-                        sizes="64px"
-                        className="w-full h-full object-cover"
-                      />
+          {reports.length === 0 ? (
+            <div className="p-10 text-center text-gray-500">
+              Anda belum pernah membuat laporan barang.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {reports.map((report) => {
+                const statusConfig = getStatusConfig(report.status);
+
+                return (
+                  <Link
+                    href={`/items/${report.id}`}
+                    key={report.id}
+                    className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer block"
+                  >
+                    <div className="flex gap-5 items-center">
+                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700 relative">
+                        <Image
+                          src={
+                            report.image_path ||
+                            "https://via.placeholder.com/150?text=No+Image"
+                          }
+                          alt={report.title}
+                          fill
+                          sizes="64px"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                            {report.title}
+                          </h3>
+                          <span
+                            className={clsx(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-md",
+                              report.type === "lost"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                            )}
+                          >
+                            {report.type === "lost" ? "Kehilangan" : "Temuan"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Dilaporkan pada{" "}
+                          {new Date(report.date).toLocaleDateString("id-ID")} •
+                          Kategori: {report.category}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-bold text-gray-900 dark:text-white text-base">
-                          {report.title}
-                        </h3>
+                    <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                         <span
                           className={clsx(
-                            "text-[10px] font-bold px-2 py-0.5 rounded-md",
-                            report.type === "lost"
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                            "w-2 h-2 rounded-full",
+                            statusConfig.dot,
                           )}
-                        >
-                          {report.type === "lost" ? "Kehilangan" : "Temuan"}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Dilaporkan pada{" "}
-                        {new Date(report.date).toLocaleDateString("id-ID")} •
-                        Kategori: {report.category}
-                      </p>
+                        ></span>
+                        {statusConfig.label}
+                      </span>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0">
-                    <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                      <span
-                        className={clsx(
-                          "w-2 h-2 rounded-full",
-                          statusConfig.dot,
-                        )}
-                      ></span>
-                      {statusConfig.label}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* List Section: Pengajuan Klaim */}
+      {activeTab === "claims" && (
+        <div className="bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+              Riwayat Pengajuan Klaim Kepemilikan Anda
+            </h2>
           </div>
-        )}
-      </div>
+
+          {claims.length === 0 ? (
+            <div className="p-10 text-center text-gray-500">
+              Anda belum pernah mengajukan klaim kepemilikan barang.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {claims.map((claim) => {
+                const claimStatusConfig = getClaimStatusConfig(claim.status);
+
+                return (
+                  <Link
+                    href={`/items/${claim.item_id}`}
+                    key={claim.id}
+                    className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer block"
+                  >
+                    <div className="flex gap-5 items-center">
+                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-purple-500/10 text-purple-400 flex items-center justify-center flex-shrink-0 border border-purple-500/20">
+                        <ShieldCheck size={28} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                            Klaim untuk: {claim.item_title}
+                          </h3>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Bukti: &quot;{claim.proof_description}&quot; • Diajukan pada{" "}
+                          {new Date(claim.created_at).toLocaleDateString("id-ID")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                        <span
+                          className={clsx(
+                            "w-2 h-2 rounded-full",
+                            claimStatusConfig.dot,
+                          )}
+                        ></span>
+                        {claimStatusConfig.label}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
