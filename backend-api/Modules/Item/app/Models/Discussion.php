@@ -5,7 +5,7 @@ namespace Modules\Item\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-// use Modules\Item\Database\Factories\DiscussionFactory;
+use App\Models\User;
 
 class Discussion extends Model
 {
@@ -21,8 +21,11 @@ class Discussion extends Model
         'message',
     ];
 
-    // protected static function newFactory(): DiscussionFactory
-    // {
-    //     // return DiscussionFactory::new();
-    // }
+    /**
+     * Relasi ke Model User (Pelapor/Komentator)
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

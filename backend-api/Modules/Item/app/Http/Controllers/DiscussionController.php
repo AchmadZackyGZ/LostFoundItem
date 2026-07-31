@@ -25,13 +25,12 @@ class DiscussionController extends Controller
     public function store(StoreDiscussionRequest $request, string $itemId): JsonResponse
     {
         try {
+            $user = $request->user();
             $discussion = $this->discussionService->postMessage(
                 $itemId,
-                $request->user(),
+                $user,
                 $request->message
             );
-
-            $user = $discussion->user;
 
             return response()->json([
                 'message' => 'Komentar berhasil ditambahkan.',

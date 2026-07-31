@@ -227,14 +227,16 @@ export default function ItemDetailPage() {
     const channelName = `item-discussion-${id}`;
     const channel = pusher.subscribe(channelName);
 
-    // 3. Instant WebSocket Event Listener (0ms Push dari Server saat Ada Chat Baru)
-    channel.bind("new-discussion", (newMsg: Discussion) => {
+    const handleNewMessage = (data: any) => {
+      const newMsg = data?.discussion || data;
+      if (!newMsg || !newMsg.message) return;
+
       setItem((prev) => {
         if (!prev) return prev;
         const exists = prev.discussions.some(
           (d) =>
-            d.id === newMsg.id ||
-            (d.message === newMsg.message && d.user.name === newMsg.user.name),
+            (d.id && newMsg.id && d.id === newMsg.id) ||
+            (d.message === newMsg.message && d.user?.name === newMsg.user?.name),
         );
         if (exists) return prev;
         return {
@@ -242,12 +244,14 @@ export default function ItemDetailPage() {
           discussions: [...prev.discussions, newMsg],
         };
       });
-    });
+    };
+
+    channel.bind("new-discussion", handleNewMessage);
+    channel.bind("discussion-posted", handleNewMessage);
 
     return () => {
       channel.unbind_all();
       pusher.unsubscribe(channelName);
-      pusher.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -813,28 +817,37 @@ export default function ItemDetailPage() {
                 </div>
               ) : (
                 item.discussions.map((msg) => {
-                  const isPelapor = msg.user.name === item.reporter.name;
+                  const msgUser = msg.user || {
+                    id: "",
+                    name: "Pengguna UISI",
+                    email: "-",
+                    department: "Informatika",
+                    role: "Mahasiswa",
+                    nim: "-",
+                    avatar_url: null,
+                  };
+                  const isPelapor = msgUser.name === item.reporter?.name;
                   const isUserAdmin =
-                    msg.user.role === "admin" ||
-                    msg.user.name.toLowerCase().includes("administrator");
+                    msgUser.role === "admin" ||
+                    (msgUser.name && msgUser.name.toLowerCase().includes("administrator"));
 
                   return (
                     <div key={msg.id} className="flex gap-3 items-start">
                       {/* HOVER PROFILE TRIGGER & POPDOWN CARD */}
                       <div className="relative group/userpopover flex-shrink-0">
-                        {msg.user.avatar_url ? (
+                        {msgUser.avatar_url ? (
                           <img
-                            src={msg.user.avatar_url}
-                            alt={msg.user.name}
-                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                            src={msgUser.avatar_url}
+                            alt={msgUser.name}
+                            onClick={() => handleOpenUserProfile(msgUser.id, msgUser)}
                             className="w-8 h-8 rounded-full object-cover shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-primary transition"
                           />
                         ) : (
                           <div
-                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                            onClick={() => handleOpenUserProfile(msgUser.id, msgUser)}
                             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm cursor-pointer hover:ring-2 hover:ring-primary transition ${isUserAdmin ? "bg-purple-600" : isPelapor ? "bg-primary" : "bg-gray-500"}`}
                           >
-                            {msg.user.name.charAt(0).toUpperCase()}
+                            {msgUser.name.charAt(0).toUpperCase()}
                           </div>
                         )}
 
@@ -842,22 +855,22 @@ export default function ItemDetailPage() {
                         <div className="absolute left-0 top-10 hidden group-hover/userpopover:block z-50 w-72 bg-[#0c1322] text-white border-2 border-blue-500/50 rounded-2xl p-4 shadow-[0_15px_40px_rgba(0,0,0,0.7)] animate-in fade-in zoom-in-95 duration-150 pointer-events-auto">
                           <div className="flex items-center gap-3 pb-3 border-b border-gray-800">
                             <div className="w-11 h-11 rounded-xl bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center border border-blue-500/40 overflow-hidden text-base flex-shrink-0">
-                              {msg.user.avatar_url ? (
+                              {msgUser.avatar_url ? (
                                 <img
-                                  src={msg.user.avatar_url}
-                                  alt={msg.user.name}
+                                  src={msgUser.avatar_url}
+                                  alt={msgUser.name}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                msg.user.name.charAt(0).toUpperCase()
+                                msgUser.name.charAt(0).toUpperCase()
                               )}
                             </div>
                             <div className="min-w-0">
                               <h4 className="font-bold text-sm text-white truncate flex items-center gap-1">
-                                {msg.user.name}
+                                {msgUser.name}
                               </h4>
                               <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block mt-0.5">
-                                {msg.user.role || (isUserAdmin ? "Admin" : "Mahasiswa")}
+                                {msgUser.role || (isUserAdmin ? "Admin" : "Mahasiswa")}
                               </span>
                             </div>
                           </div>
@@ -868,7 +881,7 @@ export default function ItemDetailPage() {
                                 <GraduationCap size={13} className="text-blue-400" /> Departemen
                               </span>
                               <span className="font-bold text-gray-200 truncate max-w-[130px]">
-                                {msg.user.department || "Informatika"}
+                                {msgUser.department || "Informatika"}
                               </span>
                             </div>
 
@@ -877,7 +890,7 @@ export default function ItemDetailPage() {
                                 <CreditCard size={13} className="text-emerald-400" /> NIM / NIP
                               </span>
                               <span className="font-mono font-bold text-blue-300">
-                                {msg.user.nim || (isUserAdmin ? "1988041201" : "3012210001")}
+                                {msgUser.nim || (isUserAdmin ? "1988041201" : "3012210001")}
                               </span>
                             </div>
 
@@ -887,14 +900,14 @@ export default function ItemDetailPage() {
                               </span>
                               <span
                                 className="font-medium text-gray-300 truncate max-w-[140px]"
-                                title={msg.user.email}
+                                title={msgUser.email}
                               >
-                                {msg.user.email || "-"}
+                                {msgUser.email || "-"}
                               </span>
                             </div>
 
                             <button
-                              onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                              onClick={() => handleOpenUserProfile(msgUser.id, msgUser)}
                               className="w-full mt-2 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                             >
                               🔍 Detail Profile Pengguna
@@ -904,16 +917,16 @@ export default function ItemDetailPage() {
                               <button
                                 onClick={() => {
                                   setSelectedSuspendUser({
-                                    id: String(msg.user.id),
-                                    name: msg.user.name,
-                                    email: msg.user.email || "-",
-                                    nim: msg.user.nim || "3012210001",
-                                    department: msg.user.department || "Informatika",
-                                    is_suspended: (msg.user as any).is_suspended || false,
-                                    suspend_reason: (msg.user as any).suspend_reason || "",
+                                    id: String(msgUser.id),
+                                    name: msgUser.name,
+                                    email: msgUser.email || "-",
+                                    nim: msgUser.nim || "3012210001",
+                                    department: msgUser.department || "Informatika",
+                                    is_suspended: (msgUser as any).is_suspended || false,
+                                    suspend_reason: (msgUser as any).suspend_reason || "",
                                   });
                                   setSuspendReason(
-                                    (msg.user as any).suspend_reason ||
+                                    (msgUser as any).suspend_reason ||
                                       "Berkata kotor dan menyebarkan informasi bohong di diskusi",
                                   );
                                   setIsSuspendModalOpen(true);
@@ -921,7 +934,7 @@ export default function ItemDetailPage() {
                                 className="w-full mt-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/40 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
                               >
                                 <ShieldAlert size={14} />{" "}
-                                {(msg.user as any).is_suspended
+                                {(msgUser as any).is_suspended
                                   ? "Buka Suspend Akun"
                                   : "Suspend Akun Mahasiswa"}
                               </button>
@@ -933,10 +946,10 @@ export default function ItemDetailPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 mb-1">
                           <span
-                            onClick={() => handleOpenUserProfile(msg.user.id, msg.user)}
+                            onClick={() => handleOpenUserProfile(msgUser.id, msgUser)}
                             className="font-bold text-xs text-gray-900 dark:text-white cursor-pointer hover:underline hover:text-blue-400 transition"
                           >
-                            {msg.user.name} {isPelapor && "(Pelapor)"}
+                            {msgUser.name} {isPelapor && "(Pelapor)"}
                           </span>
                           <span className="text-[10px] text-gray-500" suppressHydrationWarning>
                             {new Date(msg.created_at).toLocaleTimeString(
