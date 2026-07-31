@@ -5,23 +5,26 @@ namespace Modules\Item\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Modules\Item\Models\Claim;
+use Modules\Item\Services\ClaimService;
 use Modules\Auth\Contracts\AuthClientInterface;
-use Modules\Notification\Contracts\NotificationServiceInterface;
+use Exception;
 
 class AdminClaimController extends Controller
 {
-    private NotificationServiceInterface $notificationService;
+    private ClaimService $claimService;
     private AuthClientInterface $authClient;
 
     public function __construct(
-        NotificationServiceInterface $notificationService,
+        ClaimService $claimService,
         AuthClientInterface $authClient
     ) {
-        $this->notificationService = $notificationService;
+        $this->claimService = $claimService;
         $this->authClient = $authClient;
     }
 
-    // 1. LIHAT SEMUA KLAIM (Hanya untuk Admin)
+    /**
+     * Lihat Seluruh Antrean Klaim (Admin Endpoint)
+     */
     public function index(): JsonResponse
     {
         $claims = Claim::with(['item'])->latest()->get();
@@ -52,67 +55,37 @@ class AdminClaimController extends Controller
         ], 200);
     }
 
-    // 2. TERIMA KLAIM (Approve)
+    /**
+     * Terima / Setujui Klaim (Approve)
+     */
     public function approve(string $id): JsonResponse
     {
-        $claim = Claim::find($id);
-
-        if (!$claim) {
-            return response()->json(['message' => 'Data klaim tidak ditemukan'], 404);
+        try {
+            $claim = $this->claimService->approveClaim($id);
+            return response()->json([
+                'message' => 'Klaim berhasil DISETUJUI. Status barang telah diperbarui menjadi Selesai.',
+                'data' => $claim
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
+    }  
 
-        // Ubah status klaim jadi disetujui
-        $claim->update(['status' => 'approved']);
-
-        // Ubah status barang utama jadi 'completed' (Selesai/Sudah dikembalikan)
-        if ($claim->item) {
-            $claim->item->update(['status' => 'completed']);
-
-            // Kirim Notifikasi via Contract (Modular Monolith)
-            $this->notificationService->send(
-                $claim->user_id,
-                'Klaim Barang Disetujui',
-                "Klaim Anda untuk '{$claim->item->title}' telah diverifikasi dan disetujui oleh admin.",
-                'claim',
-                "/items/{$claim->item_id}"
-            );
-        }
-
-        return response()->json([
-            'message' => 'Klaim berhasil DISETUJUI. Status barang telah diperbarui menjadi Selesai.',
-            'data' => $claim
-        ], 200);
-    }
-
-    // 3. TOLAK KLAIM (Reject)
+    /**
+     * Tolak Klaim (Reject)
+     */
     public function reject(string $id): JsonResponse
     {
-        $claim = Claim::find($id);
-
-        if (!$claim) {
-            return response()->json(['message' => 'Data klaim tidak ditemukan'], 404);
+        try {
+            $claim = $this->claimService->rejectClaim($id);
+            return response()->json([
+                'message' => 'Klaim berhasil DITOLAK. Barang kembali berstatus aktif di publik.',
+                'data' => $claim
+            ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        // Ubah status klaim jadi ditolak
-        $claim->update(['status' => 'rejected']);
-
-        // KEMBALIKAN status barang menjadi 'active' agar bisa diklaim oleh orang lain
-        if ($claim->item) {
-            $claim->item->update(['status' => 'active']);
-
-            // Kirim Notifikasi via Contract (Modular Monolith)
-            $this->notificationService->send(
-                $claim->user_id,
-                'Klaim Barang Ditolak',
-                "Klaim Anda untuk '{$claim->item->title}' telah ditolak oleh admin.",
-                'claim',
-                "/items/{$claim->item_id}"
-            );
-        }
-
-        return response()->json([
-            'message' => 'Klaim berhasil DITOLAK. Barang kembali berstatus aktif di publik.',
-            'data' => $claim
-        ], 200);
     }
 }

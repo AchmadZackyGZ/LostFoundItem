@@ -8,9 +8,18 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Item\Models\Item;
 use Modules\Item\Models\Claim;
+use Modules\Auth\Services\UserModerationService;
+use Exception;
 
 class AdminUserController extends Controller
 {
+    private UserModerationService $userModerationService;
+
+    public function __construct(UserModerationService $userModerationService)
+    {
+        $this->userModerationService = $userModerationService;
+    }
+
     /**
      * Lihat seluruh daftar pengguna terdaftar khusus Mahasiswa (Eksklusi Admin)
      */
@@ -109,61 +118,41 @@ class AdminUserController extends Controller
      */
     public function suspendUser(Request $request, string $id): JsonResponse
     {
-        $targetUser = User::find($id);
+        try {
+            $days = $request->input('days');
+            $untilInput = $request->input('suspended_until');
+            $reason = $request->input('suspend_reason');
+            $isUnsuspend = $request->input('unsuspend') === true;
 
-        if (!$targetUser) {
-            return response()->json(['message' => 'Pengguna tidak ditemukan'], 404);
-        }
+            $targetUser = $this->userModerationService->suspendUser(
+                $id,
+                is_null($days) ? null : (int)$days,
+                $untilInput,
+                $reason,
+                $isUnsuspend
+            );
 
-        if ($targetUser->role === 'admin') {
-            return response()->json(['message' => 'Akun Administrator tidak dapat ditangguhkan / suspend.'], 403);
-        }
-
-        $days = $request->input('days');
-        $untilInput = $request->input('suspended_until');
-        $reason = $request->input('suspend_reason');
-
-        // Jika request untuk Unsuspend
-        if ($days === 0 || $request->input('unsuspend') === true) {
-            $targetUser->update([
-                'suspended_until' => null,
-                'suspend_reason' => null,
-            ]);
+            if ($isUnsuspend || $days === 0) {
+                return response()->json([
+                    'message' => "Penangguhan akun {$targetUser->name} telah dicabut (Un-suspended).",
+                    'data' => $targetUser,
+                ], 200);
+            }
 
             return response()->json([
-                'message' => "Penangguhan akun {$targetUser->name} telah dicabut (Un-suspended).",
-                'data' => $targetUser,
+                'message' => "Akun {$targetUser->name} telah berhasil ditangguhkan (Suspend).",
+                'data' => [
+                    'id' => $targetUser->id,
+                    'name' => $targetUser->name,
+                    'is_suspended' => true,
+                    'suspended_until' => $targetUser->suspended_until ? $targetUser->suspended_until->toIso8601String() : null,
+                    'suspend_reason' => $targetUser->suspend_reason,
+                ],
             ], 200);
+        } catch (Exception $e) {
+            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+            return response()->json(['message' => $e->getMessage()], $code);
         }
-
-        $request->validate([
-            'suspend_reason' => 'required|string|max:500',
-        ]);
-
-        if ($untilInput) {
-            $suspendedUntil = \Carbon\Carbon::parse($untilInput);
-        } elseif (!is_null($days) && (int)$days > 0) {
-            $suspendedUntil = now()->addDays((int)$days);
-        } else {
-            // Default 30 hari jika durasi tidak diisi
-            $suspendedUntil = now()->addDays(30);
-        }
-
-        $targetUser->update([
-            'suspended_until' => $suspendedUntil,
-            'suspend_reason' => $reason,
-        ]);
-
-        return response()->json([
-            'message' => "Akun {$targetUser->name} telah berhasil ditangguhkan (Suspend).",
-            'data' => [
-                'id' => $targetUser->id,
-                'name' => $targetUser->name,
-                'is_suspended' => true,
-                'suspended_until' => $suspendedUntil->toIso8601String(),
-                'suspend_reason' => $targetUser->suspend_reason,
-            ],
-        ], 200);
     }
 
     /**
