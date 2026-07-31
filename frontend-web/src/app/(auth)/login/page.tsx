@@ -41,10 +41,28 @@ export default function LoginPage() {
         router.push("/");
       }
     } catch (error: unknown) {
-      // 👈 3. Gunakan axios.isAxiosError untuk memvalidasi tipe error
       if (axios.isAxiosError(error)) {
-        if (error.response?.data?.message) {
-          setErrorMsg(error.response.data.message);
+        const responseData = error.response?.data;
+        if (responseData?.message) {
+          setErrorMsg(responseData.message);
+        } else if (responseData?.error) {
+          setErrorMsg(responseData.error);
+        } else if (responseData?.errors && typeof responseData.errors === "object") {
+          const firstErrKey = Object.keys(responseData.errors)[0];
+          const firstErrVal = responseData.errors[firstErrKey];
+          if (Array.isArray(firstErrVal) && firstErrVal.length > 0) {
+            setErrorMsg(firstErrVal[0]);
+          } else if (typeof firstErrVal === "string") {
+            setErrorMsg(firstErrVal);
+          } else {
+            setErrorMsg("Gagal login. Mohon periksa input Anda.");
+          }
+        } else if (error.code === "ERR_NETWORK" || !error.response) {
+          setErrorMsg("Gagal terhubung ke server backend. Pastikan server backend berjalan.");
+        } else if (error.response?.status === 401) {
+          setErrorMsg("Email atau password salah.");
+        } else if (error.response?.status === 403) {
+          setErrorMsg("Email belum diverifikasi. Silakan cek email Anda untuk kode OTP.");
         } else {
           setErrorMsg("Kredensial tidak valid atau server bermasalah.");
         }

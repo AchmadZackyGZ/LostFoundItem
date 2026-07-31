@@ -10,20 +10,20 @@ import clsx from "clsx";
 import Image from "next/image";
 
 interface ItemCardProps {
-  id: string; // 🔥 WAJIB DIISI: Hapus tanda '?' agar tidak bisa dikosongi
+  id: string;
   variant?: "vertical" | "horizontal";
   title: string;
   location: string;
   time: string;
   description?: string;
-  status: "Hilang" | "Menunggu Validasi" | "Selesai" | string; // Tambahkan 'string' agar lebih fleksibel menerima data API
+  status: "Hilang" | "Menunggu Validasi" | "Selesai" | string;
   imageUrl: string;
   isUrgent?: boolean;
   isOldest?: boolean;
 }
 
 export default function ItemCard({
-  id, // 🔥 Hapus default = "1" agar komponen induk dipaksa mengirim UUID asli
+  id,
   variant = "vertical",
   title,
   location,

@@ -168,8 +168,10 @@ export default function ProfilePage() {
             myItems.filter((item: { status: string }) => item.status === "completed").length,
           );
         }
-      } catch (err) {
-        console.error("Gagal mengambil data profil:", err);
+      } catch (err: any) {
+        if (err?.response?.status === 401) {
+          router.push("/login");
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -329,9 +331,9 @@ export default function ProfilePage() {
   // Handle Logout
   const handleLogout = async () => {
     try {
-      await api.post("/api/auth/logout");
-    } catch (err) {
-      console.error("Logout error:", err);
+      await useAuthStore.getState().logout();
+    } catch {
+      // Biarkan redirect login tetap berjalan
     } finally {
       localStorage.clear();
       router.push("/login");

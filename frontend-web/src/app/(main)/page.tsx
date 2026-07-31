@@ -379,7 +379,7 @@ export default function Home() {
             </button>
           ) : (
             <div className="text-center text-xs font-semibold text-gray-400 bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 px-6 py-2.5 rounded-full">
-              Seluruh Laporan Barang di Dasbor Telah Ditampilkan ✨
+              Seluruh Laporan Barang di Dasbor Telah Ditampilkan
             </div>
           )}
         </div>

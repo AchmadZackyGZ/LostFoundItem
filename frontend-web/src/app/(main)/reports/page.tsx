@@ -55,8 +55,8 @@ export default function ReportsPage() {
         }
         return newItems;
       });
-    } catch (error) {
-      console.error("Gagal mengambil data laporan:", error);
+    } catch {
+      // Penanganan diam jika tidak terotentikasi
     } finally {
       setIsLoading(false);
     }

@@ -50,7 +50,7 @@ class ItemController extends Controller
     // get all seluruh daftar laporan barang
     public function index(Request $request): JsonResponse
     {
-        // 🔥 TAMBAHKAN FILTER: Hanya ambil yang BUKAN pending
+        // Filter: Hanya ambil yang BUKAN pending
         $query = Item::with('category')->where('status', '!=', 'pending');
 
         // Filter Pencarian (Nama, Lokasi, Deskripsi, ID)
@@ -303,14 +303,14 @@ class ItemController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
-        // 🚨 GEMBOK KEPEMILIKAN
+        // Gembok kepemilikan
         if ($item->user_id !== $request->user()->id) {
             return response()->json([
                 'message' => 'Akses ditolak: Ini bukan laporan barang Anda.'
             ], 403);
         }
 
-        // 🔥 TAMBAHAN: GEMBOK STATUS (Tidak boleh edit barang yang sedang diproses/selesai)
+        // Gembok status (Tidak boleh edit barang yang sedang diproses/selesai)
         if (in_array($item->status, ['is_pending', 'completed'])) {
             return response()->json([
                 'message' => 'Laporan tidak bisa diubah karena sedang dalam proses klaim atau sudah selesai.'
@@ -361,14 +361,14 @@ class ItemController extends Controller
             return response()->json(['message' => 'Barang tidak ditemukan'], 404);
         }
 
-        // 🚨 GEMBOK KEPEMILIKAN
+        // Gembok kepemilikan
         if ($item->user_id !== $request->user()->id) {
             return response()->json([
                 'message' => 'Akses ditolak: Anda tidak berhak menghapus laporan ini.'
             ], 403);
         }
 
-        // 🔥 PERBAIKAN: Hanya blokir jika statusnya sedang diklaim atau sudah selesai
+        // Hanya blokir jika statusnya sedang diklaim atau sudah selesai
         if (in_array($item->status, ['is_pending', 'completed'])) {
             return response()->json([
                 'message' => 'Laporan tidak bisa dihapus karena sedang dalam proses klaim atau sudah diselesaikan.'

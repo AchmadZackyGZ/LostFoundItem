@@ -53,10 +53,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      // TEMBAKAN DIREVISI: /api/auth/logout
       await axios.post("/api/auth/logout");
     } catch (error) {
-      console.error("Gagal logout di server:", error);
+      // Biarkan state dihapus di client meskipun server logout mengalami kendala jaringan
     } finally {
       set({ user: null, isAuthenticated: false });
     }
@@ -69,7 +68,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data } = await axios.get("/api/auth/me");
       set({ user: data, isAuthenticated: true, isLoading: false });
     } catch (error) {
-      // 🔥 HAPUS console.error DI SINI AGAR TIDAK MUNCUL LAYAR MERAH
+      // Hapus console.error di sini agar tidak memicu dev overlay saat belum login
       // Biarkan state menjadi false secara diam-diam saat user belum login
       set({ user: null, isAuthenticated: false, isLoading: false });
     }

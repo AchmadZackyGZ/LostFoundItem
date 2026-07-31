@@ -91,35 +91,19 @@ class NotificationController extends Controller
     /* } */
 
     // Menandai SEMUA notifikasi sebagai sudah dibaca
-    public function markAllAsRead()
-    {
-        /** @var User $user */
-        $user = Auth::user();
-        $user->unreadNotifications->markAsRead();
-        return response()->json(['success' => true, 'message' => 'Semua notifikasi ditandai telah dibaca']);
-    }
-
-    // Mendapatkan jumlah notifikasi yang belum dibaca (untuk badge)
-    public function unreadCount()
-    {
-        /** @var User $user */
-        $user = Auth::user();
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'count' => $user->unreadNotifications->count(),
-            ],
-        ]);
-    }
-
-    // 3. TANDAI SEMUA NOTIFIKASI SUDAH DIBACA
     public function markAllAsRead(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = Auth::user();
+        if ($user) {
+            $user->unreadNotifications->markAsRead();
+        }
         AppNotification::where('user_id', $request->user()->id)
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
         return response()->json([
+            'success' => true,
             'message' => 'Semua notifikasi ditandai telah dibaca.'
         ], 200);
     }
